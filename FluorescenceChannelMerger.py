@@ -1,6 +1,7 @@
 """
 Fluorescence Channel Merger & Thresholder
 ------------------------------------------
+Version: 2.0
 Author: Owen Faust, Rochester Institute of Technology, June 2026.
 Created with the help of Claude AI.
 
@@ -8,12 +9,15 @@ A simple GUI wrapper around the DAPI/GFP/TxRed rename -> merge -> threshold ->
 scale-bar -> PNG export pipeline. Handles images with any combination of the
 three channels present -- 1, 2, or 3 channels per image, in any combination --
 so a folder can mix full 3-channel image sets with DAPI-only, TxRed-only,
-or any other partial set. Lets you pick a source folder and adjust the GFP
-(green) and TxRed (red) thresholds and the microscope scale before running
-the batch.
+or any other partial set. Supports processing multiple source folders in one
+run, added either via a file dialog or by dragging folders directly onto the
+window. Lets you adjust the GFP (green) and TxRed (red) thresholds and the
+microscope scale before running the batch.
 
 Run with:  python FluorescenceChannelMerger.py
 Requires:  numpy, tifffile, pillow   (tkinter ships with standard Python)
+Optional:  tkinterdnd2 (enables drag-and-drop folder support; the app runs
+           fine without it, just using the "Add Folder..." dialog instead)
 """
 
 import os
@@ -27,6 +31,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+    DND_AVAILABLE = True
+except ImportError:
+    DND_AVAILABLE = False
 
 
 # ── PIPELINE (same logic as the CLI script, wrapped as functions) ───────────
@@ -262,11 +272,14 @@ def run_pipeline(source, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max,
 
 # ── GUI ───────────────────────────────────────────────────────────────────
 
-class App(tk.Tk):
+_BaseWindow = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
+
+
+class App(_BaseWindow):
     def __init__(self):
         super().__init__()
-        self.title("Fluorescence Channel Merger")
-        self.geometry("560x680")
+        self.title("Fluorescence Channel Merger v2.0")
+        self.geometry("560x700")
         self.resizable(False, False)
 
         self.source_folders = []  # list of folder paths queued for processing
@@ -280,8 +293,17 @@ class App(tk.Tk):
         pad = {"padx": 10, "pady": 6}
 
         # Folder selection (multiple folders supported)
-        frame_folder = ttk.LabelFrame(self, text="Source Folders (processed together, same settings)")
+        folder_frame_title = "Source Folders (drag & drop folders here, or use Add Folder...)" \
+            if DND_AVAILABLE else "Source Folders (processed together, same settings)"
+        frame_folder = ttk.LabelFrame(self, text=folder_frame_title)
         frame_folder.pack(fill="x", **pad)
+
+        if not DND_AVAILABLE:
+            ttk.Label(
+                frame_folder,
+                text="Tip: install the 'tkinterdnd2' package to enable drag-and-drop here.",
+                foreground="#666666"
+            ).pack(anchor="w", padx=8, pady=(6, 0))
 
         list_row = ttk.Frame(frame_folder)
         list_row.pack(fill="x", padx=8, pady=8)
@@ -290,6 +312,13 @@ class App(tk.Tk):
         scrollbar = ttk.Scrollbar(list_row, orient="vertical", command=self.folder_listbox.yview)
         scrollbar.pack(side="left", fill="y")
         self.folder_listbox.config(yscrollcommand=scrollbar.set)
+
+        if DND_AVAILABLE:
+            # Register both the listbox and the surrounding frame as drop targets
+            # so dropping anywhere in that area works, not just exactly on the list.
+            for widget in (self.folder_listbox, frame_folder, list_row):
+                widget.drop_target_register(DND_FILES)
+                widget.dnd_bind("<<Drop>>", self.on_drop)
 
         button_row = ttk.Frame(frame_folder)
         button_row.pack(fill="x", padx=8, pady=(0, 8))
@@ -346,6 +375,36 @@ class App(tk.Tk):
             self.source_folders.append(folder)
             self.folder_listbox.insert("end", folder)
         elif folder in self.source_folders:
+            messagebox.showinfo("Already added", "That folder is already in the list.")
+
+    def on_drop(self, event):
+        # event.data is a Tcl list of dropped paths (braces around any path
+        # containing spaces) -- self.tk.splitlist parses that correctly.
+        try:
+            paths = self.tk.splitlist(event.data)
+        except Exception:
+            paths = [event.data]
+
+        added, skipped_files, skipped_dupes = [], [], []
+        for path in paths:
+            path = path.strip("{}")
+            if os.path.isdir(path):
+                if path not in self.source_folders:
+                    self.source_folders.append(path)
+                    self.folder_listbox.insert("end", path)
+                    added.append(path)
+                else:
+                    skipped_dupes.append(path)
+            elif os.path.isfile(path):
+                skipped_files.append(path)
+
+        if skipped_files and not added:
+            messagebox.showinfo(
+                "Folders only",
+                "Please drop folders, not individual files. "
+                "Drag the folder that contains your .tif files instead."
+            )
+        elif skipped_dupes and not added:
             messagebox.showinfo("Already added", "That folder is already in the list.")
 
     def remove_selected(self):

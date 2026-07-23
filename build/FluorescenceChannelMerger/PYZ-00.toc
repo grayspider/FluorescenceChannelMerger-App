@@ -1,6 +1,6 @@
 ('C:\\Users\\obfau\\OneDrive\\Documents\\2026 Summer\\Gaborski Lab Summer '
- "'26\\Claude - exe from py\\files - for "
- 'windows\\build\\FluorescenceChannelMerger\\PYZ-00.pyz',
+ "'26\\Claude - exe from py\\files - for windows - "
+ 'Copy\\build\\FluorescenceChannelMerger\\PYZ-00.pyz',
  [('PIL',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PIL\\__init__.py',
    'PYMODULE'),
@@ -2369,6 +2369,9 @@
   ('threading',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py',
    'PYMODULE'),
+  ('threadpoolctl',
+   'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\threadpoolctl.py',
+   'PYMODULE'),
   ('tifffile',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\tifffile\\__init__.py',
    'PYMODULE'),
@@ -2410,6 +2413,12 @@
    'PYMODULE'),
   ('tkinter.ttk',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tkinter\\ttk.py',
+   'PYMODULE'),
+  ('tkinterdnd2',
+   'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\tkinterdnd2\\__init__.py',
+   'PYMODULE'),
+  ('tkinterdnd2.TkinterDnD',
+   'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\tkinterdnd2\\TkinterDnD.py',
    'PYMODULE'),
   ('token',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\token.py',
