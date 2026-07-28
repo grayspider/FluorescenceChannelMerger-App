@@ -1,7 +1,7 @@
 """
 Fluorescence Channel Merger & Thresholder
 ------------------------------------------
-Version: 2.0
+Version: 3.1
 Author: Owen Faust, Rochester Institute of Technology, June 2026.
 Created with the help of Claude AI.
 
@@ -11,8 +11,10 @@ three channels present -- 1, 2, or 3 channels per image, in any combination --
 so a folder can mix full 3-channel image sets with DAPI-only, TxRed-only,
 or any other partial set. Supports processing multiple source folders in one
 run, added either via a file dialog or by dragging folders directly onto the
-window. Lets you adjust the GFP (green) and TxRed (red) thresholds and the
-microscope scale before running the batch.
+window. DAPI (Ch1) can use auto-stretch per image (the original behavior) or
+a manually set min/max, same as the GFP and TxRed channels. Each channel's
+display color is also user-selectable via a color picker (defaults to the
+traditional DAPI=blue, GFP=green, TxRed=red mapping).
 
 Run with:  python FluorescenceChannelMerger.py
 Requires:  numpy, tifffile, pillow   (tkinter ships with standard Python)
@@ -30,7 +32,7 @@ import tifffile
 from PIL import Image, ImageDraw, ImageFont
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, ttk, colorchooser
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -41,10 +43,24 @@ except ImportError:
 
 # ── PIPELINE (same logic as the CLI script, wrapped as functions) ───────────
 
-def run_pipeline(source, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max,
-                  ch1_brightness, log, open_output=True):
+def hex_to_rgb(hex_color):
+    """Convert a '#rrggbb' string to an (r, g, b) tuple of ints (0-255)."""
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def run_pipeline(source, pixels_per_um, ch1_auto, ch1_min_setting, ch1_max_setting,
+                  ch2_min, ch2_max, ch3_min, ch3_max,
+                  ch1_brightness, ch1_color, ch2_color, ch3_color,
+                  log, open_output=True):
     scale_bar_um = 100
     scale_bar_px = int(pixels_per_um * scale_bar_um)
+
+    # ch1_color/ch2_color/ch3_color are passed in as '#rrggbb' hex strings so
+    # they can be logged directly in the CSV; convert to RGB tuples for math.
+    ch1_rgb = hex_to_rgb(ch1_color)
+    ch2_rgb = hex_to_rgb(ch2_color)
+    ch3_rgb = hex_to_rgb(ch3_color)
 
     source_parent = os.path.dirname(source)
     source_name = os.path.basename(source)
@@ -167,7 +183,9 @@ def run_pipeline(source, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max,
         writer = csv.writer(csvfile)
         writer.writerow([
             "Filename", "Channels", "Width", "Height", "PixelsPerUm",
-            "Ch1_Min", "Ch1_Max", "Ch2_Min", "Ch2_Max", "Ch3_Min", "Ch3_Max"
+            "Ch1_Mode", "Ch1_Min", "Ch1_Max", "Ch1_Color",
+            "Ch2_Min", "Ch2_Max", "Ch2_Color",
+            "Ch3_Min", "Ch3_Max", "Ch3_Color"
         ])
 
         for filename in os.listdir(composite):
@@ -193,34 +211,35 @@ def run_pipeline(source, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max,
             channel_arrays = {tag: img[i].astype(np.float32) for i, tag in enumerate(tags_present)}
             height, width = next(iter(channel_arrays.values())).shape
 
-            # Ch1 (DAPI / blue) -- auto-stretched per image
+            rgb_float = np.zeros((height, width, 3), dtype=np.float32)
+
+            # Ch1 (DAPI) -- auto-stretch per image, or manual min/max
             if "ch1" in channel_arrays:
                 ch1 = channel_arrays["ch1"]
-                ch1_min, ch1_max = ch1.min(), ch1.max()
-                ch1_norm = np.clip((ch1 - ch1_min) / (ch1_max - ch1_min), 0, 1)
-                ch1_norm = np.clip(ch1_norm * ch1_brightness, 0, 1)
-                b = (ch1_norm * 255).astype(np.uint8)
+                if ch1_auto:
+                    ch1_min, ch1_max = ch1.min(), ch1.max()
+                    ch1_norm = np.clip((ch1 - ch1_min) / (ch1_max - ch1_min), 0, 1)
+                    ch1_norm = np.clip(ch1_norm * ch1_brightness, 0, 1)
+                else:
+                    ch1_min, ch1_max = ch1_min_setting, ch1_max_setting
+                    ch1_norm = np.clip((ch1 - ch1_min) / (ch1_max - ch1_min), 0, 1)
+                rgb_float += ch1_norm[..., np.newaxis] * np.array(ch1_rgb, dtype=np.float32)
             else:
                 ch1_min = ch1_max = None
-                b = np.zeros((height, width), dtype=np.uint8)
 
-            # Ch2 (GFP / green) -- manual threshold
+            # Ch2 (GFP) -- manual threshold
             if "ch2" in channel_arrays:
                 ch2 = channel_arrays["ch2"]
                 ch2_norm = np.clip((ch2 - ch2_min) / (ch2_max - ch2_min), 0, 1)
-                g = (ch2_norm * 255).astype(np.uint8)
-            else:
-                g = np.zeros((height, width), dtype=np.uint8)
+                rgb_float += ch2_norm[..., np.newaxis] * np.array(ch2_rgb, dtype=np.float32)
 
-            # Ch3 (TxRed / red) -- manual threshold
+            # Ch3 (TxRed) -- manual threshold
             if "ch3" in channel_arrays:
                 ch3 = channel_arrays["ch3"]
                 ch3_norm = np.clip((ch3 - ch3_min) / (ch3_max - ch3_min), 0, 1)
-                r = (ch3_norm * 255).astype(np.uint8)
-            else:
-                r = np.zeros((height, width), dtype=np.uint8)
+                rgb_float += ch3_norm[..., np.newaxis] * np.array(ch3_rgb, dtype=np.float32)
 
-            rgb = np.stack([r, g, b], axis=-1)
+            rgb = np.clip(rgb_float, 0, 255).astype(np.uint8)
             pil_img = Image.fromarray(rgb)
             draw = ImageDraw.Draw(pil_img)
 
@@ -249,12 +268,16 @@ def run_pipeline(source, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max,
 
             writer.writerow([
                 filename, "+".join(tags_present), width, height, pixels_per_um,
+                ("auto" if ch1_auto else "manual") if "ch1" in channel_arrays else "",
                 ch1_min if "ch1" in channel_arrays else "",
                 ch1_max if "ch1" in channel_arrays else "",
+                ch1_color if "ch1" in channel_arrays else "",
                 ch2_min if "ch2" in channel_arrays else "",
                 ch2_max if "ch2" in channel_arrays else "",
+                ch2_color if "ch2" in channel_arrays else "",
                 ch3_min if "ch3" in channel_arrays else "",
                 ch3_max if "ch3" in channel_arrays else "",
+                ch3_color if "ch3" in channel_arrays else "",
             ])
             log(f"  Processed: {filename}  ({'+'.join(tags_present)})")
 
@@ -278,8 +301,8 @@ _BaseWindow = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
 class App(_BaseWindow):
     def __init__(self):
         super().__init__()
-        self.title("Fluorescence Channel Merger v2.0")
-        self.geometry("560x700")
+        self.title("Fluorescence Channel Merger v3.1")
+        self.geometry("560x720")
         self.resizable(False, False)
 
         self.source_folders = []  # list of folder paths queued for processing
@@ -289,6 +312,15 @@ class App(_BaseWindow):
         self.ch3_min = tk.StringVar(value="100")
         self.ch3_max = tk.StringVar(value="1000")
         self.ch1_brightness = tk.StringVar(value="2")
+        self.ch1_auto_var = tk.BooleanVar(value=True)
+        self.ch1_min = tk.StringVar(value="0")
+        self.ch1_max = tk.StringVar(value="500")
+
+        # Channel colors (hex strings), default to the traditional DAPI=blue,
+        # GFP=green, TxRed=red mapping used in earlier versions.
+        self.ch1_color = tk.StringVar(value="#0000ff")
+        self.ch2_color = tk.StringVar(value="#00ff00")
+        self.ch3_color = tk.StringVar(value="#ff0000")
 
         pad = {"padx": 10, "pady": 6}
 
@@ -340,20 +372,58 @@ class App(_BaseWindow):
         frame_thresh = ttk.LabelFrame(self, text="Channel Thresholds (applied to every folder above)")
         frame_thresh.pack(fill="x", **pad)
 
-        ttk.Label(frame_thresh, text="Ch1 (DAPI / blue) brightness multiplier:").grid(
+        ttk.Label(frame_thresh, text="Ch1 (DAPI):").grid(
             row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(frame_thresh, textvariable=self.ch1_brightness, width=10).grid(
-            row=0, column=1, padx=8, pady=6)
+        self.ch1_auto_check = ttk.Checkbutton(
+            frame_thresh, text="Auto-stretch per image", variable=self.ch1_auto_var,
+            command=self._update_ch1_mode_state
+        )
+        self.ch1_auto_check.grid(row=0, column=1, columnspan=3, sticky="w", padx=8, pady=6)
+        ttk.Label(frame_thresh, text="Color:").grid(row=0, column=4, sticky="w", padx=(4, 2))
+        self.ch1_color_button = tk.Button(
+            frame_thresh, text="  ", width=3, bg=self.ch1_color.get(),
+            command=lambda: self.pick_color(self.ch1_color, self.ch1_color_button, "DAPI (Ch1)")
+        )
+        self.ch1_color_button.grid(row=0, column=5, padx=(0, 8))
 
-        ttk.Label(frame_thresh, text="Ch2 (GFP / green) min:").grid(row=1, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(frame_thresh, textvariable=self.ch2_min, width=10).grid(row=1, column=1, padx=8, pady=6)
-        ttk.Label(frame_thresh, text="max:").grid(row=1, column=2, sticky="w")
-        ttk.Entry(frame_thresh, textvariable=self.ch2_max, width=10).grid(row=1, column=3, padx=8, pady=6)
+        ttk.Label(frame_thresh, text="  Brightness multiplier (auto-stretch only):").grid(
+            row=1, column=0, sticky="w", padx=8, pady=6)
+        self.ch1_brightness_entry = ttk.Entry(frame_thresh, textvariable=self.ch1_brightness, width=10)
+        self.ch1_brightness_entry.grid(row=1, column=1, padx=8, pady=6)
 
-        ttk.Label(frame_thresh, text="Ch3 (TxRed / red) min:").grid(row=2, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(frame_thresh, textvariable=self.ch3_min, width=10).grid(row=2, column=1, padx=8, pady=6)
+        ttk.Label(frame_thresh, text="  Manual min:").grid(row=2, column=0, sticky="w", padx=8, pady=6)
+        self.ch1_min_entry = ttk.Entry(frame_thresh, textvariable=self.ch1_min, width=10)
+        self.ch1_min_entry.grid(row=2, column=1, padx=8, pady=6)
         ttk.Label(frame_thresh, text="max:").grid(row=2, column=2, sticky="w")
-        ttk.Entry(frame_thresh, textvariable=self.ch3_max, width=10).grid(row=2, column=3, padx=8, pady=6)
+        self.ch1_max_entry = ttk.Entry(frame_thresh, textvariable=self.ch1_max, width=10)
+        self.ch1_max_entry.grid(row=2, column=3, padx=8, pady=6)
+
+        ttk.Separator(frame_thresh, orient="horizontal").grid(
+            row=3, column=0, columnspan=6, sticky="ew", padx=8, pady=6)
+
+        ttk.Label(frame_thresh, text="Ch2 (GFP) min:").grid(row=4, column=0, sticky="w", padx=8, pady=6)
+        ttk.Entry(frame_thresh, textvariable=self.ch2_min, width=10).grid(row=4, column=1, padx=8, pady=6)
+        ttk.Label(frame_thresh, text="max:").grid(row=4, column=2, sticky="w")
+        ttk.Entry(frame_thresh, textvariable=self.ch2_max, width=10).grid(row=4, column=3, padx=8, pady=6)
+        ttk.Label(frame_thresh, text="Color:").grid(row=4, column=4, sticky="w", padx=(4, 2))
+        self.ch2_color_button = tk.Button(
+            frame_thresh, text="  ", width=3, bg=self.ch2_color.get(),
+            command=lambda: self.pick_color(self.ch2_color, self.ch2_color_button, "GFP (Ch2)")
+        )
+        self.ch2_color_button.grid(row=4, column=5, padx=(0, 8))
+
+        ttk.Label(frame_thresh, text="Ch3 (TxRed) min:").grid(row=5, column=0, sticky="w", padx=8, pady=6)
+        ttk.Entry(frame_thresh, textvariable=self.ch3_min, width=10).grid(row=5, column=1, padx=8, pady=6)
+        ttk.Label(frame_thresh, text="max:").grid(row=5, column=2, sticky="w")
+        ttk.Entry(frame_thresh, textvariable=self.ch3_max, width=10).grid(row=5, column=3, padx=8, pady=6)
+        ttk.Label(frame_thresh, text="Color:").grid(row=5, column=4, sticky="w", padx=(4, 2))
+        self.ch3_color_button = tk.Button(
+            frame_thresh, text="  ", width=3, bg=self.ch3_color.get(),
+            command=lambda: self.pick_color(self.ch3_color, self.ch3_color_button, "TxRed (Ch3)")
+        )
+        self.ch3_color_button.grid(row=5, column=5, padx=(0, 8))
+
+        self._update_ch1_mode_state()
 
         # Run button + progress
         frame_run = ttk.Frame(self)
@@ -368,6 +438,24 @@ class App(_BaseWindow):
         frame_log.pack(fill="both", expand=True, **pad)
         self.log_text = tk.Text(frame_log, wrap="word", height=18, state="disabled")
         self.log_text.pack(fill="both", expand=True, padx=8, pady=8)
+
+    def pick_color(self, color_var, button, label):
+        current = color_var.get()
+        result = colorchooser.askcolor(color=current, title=f"Choose color for {label}")
+        if result and result[1]:
+            hex_color = result[1]
+            color_var.set(hex_color)
+            button.config(bg=hex_color, activebackground=hex_color)
+
+    def _update_ch1_mode_state(self):
+        if self.ch1_auto_var.get():
+            self.ch1_brightness_entry.config(state="normal")
+            self.ch1_min_entry.config(state="disabled")
+            self.ch1_max_entry.config(state="disabled")
+        else:
+            self.ch1_brightness_entry.config(state="disabled")
+            self.ch1_min_entry.config(state="normal")
+            self.ch1_max_entry.config(state="normal")
 
     def add_folder(self):
         folder = filedialog.askdirectory(title="Select a source folder containing TIFF files")
@@ -437,6 +525,8 @@ class App(_BaseWindow):
 
         try:
             pixels_per_um = float(self.pixels_per_um.get())
+            ch1_min = float(self.ch1_min.get())
+            ch1_max = float(self.ch1_max.get())
             ch2_min = float(self.ch2_min.get())
             ch2_max = float(self.ch2_max.get())
             ch3_min = float(self.ch3_min.get())
@@ -446,10 +536,15 @@ class App(_BaseWindow):
             messagebox.showerror("Invalid input", "Scale and threshold fields must be numbers.")
             return
 
+        ch1_auto = self.ch1_auto_var.get()
+        ch1_color = self.ch1_color.get()
+        ch2_color = self.ch2_color.get()
+        ch3_color = self.ch3_color.get()
+
         if pixels_per_um <= 0:
             messagebox.showerror("Invalid value", "Pixels per micron must be greater than 0.")
             return
-        if ch2_max <= ch2_min or ch3_max <= ch3_min:
+        if (not ch1_auto and ch1_max <= ch1_min) or ch2_max <= ch2_min or ch3_max <= ch3_min:
             messagebox.showerror("Invalid range", "Each channel's max must be greater than its min.")
             return
 
@@ -464,12 +559,16 @@ class App(_BaseWindow):
 
         thread = threading.Thread(
             target=self._run_all_worker,
-            args=(folders, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max, ch1_brightness),
+            args=(folders, pixels_per_um, ch1_auto, ch1_min, ch1_max,
+                  ch2_min, ch2_max, ch3_min, ch3_max, ch1_brightness,
+                  ch1_color, ch2_color, ch3_color),
             daemon=True
         )
         thread.start()
 
-    def _run_all_worker(self, folders, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max, ch1_brightness):
+    def _run_all_worker(self, folders, pixels_per_um, ch1_auto, ch1_min, ch1_max,
+                         ch2_min, ch2_max, ch3_min, ch3_max, ch1_brightness,
+                         ch1_color, ch2_color, ch3_color):
         results = {}  # folder -> (True, output_path) or (False, error_message)
 
         def process_one(folder):
@@ -480,8 +579,10 @@ class App(_BaseWindow):
 
             try:
                 output = run_pipeline(
-                    folder, pixels_per_um, ch2_min, ch2_max, ch3_min, ch3_max,
-                    ch1_brightness, tagged_log, open_output=False
+                    folder, pixels_per_um, ch1_auto, ch1_min, ch1_max,
+                    ch2_min, ch2_max, ch3_min, ch3_max,
+                    ch1_brightness, ch1_color, ch2_color, ch3_color,
+                    tagged_log, open_output=False
                 )
                 return folder, True, output
             except Exception as e:

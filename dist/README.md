@@ -1,5 +1,5 @@
 # Fluorescence Channel Merger
-### v2.0
+### v3.0
 
 A simple desktop app for the Gaborski Lab that takes raw single-channel TIFF
 images from the microscope (DAPI, GFP, TxRed — any combination) and automatically:
@@ -19,6 +19,11 @@ No coding or command line needed — just run the app, add your folder(s), set
 your thresholds, and click **Run**.
 
 ---
+
+## What's new in v3.0
+
+- Manual min/max thresholding for the DAPI (Ch1) channel, same as GFP and TxRed — toggle between this and the original auto-stretch-per-image behavior with a single checkbox
+- `metadata.csv` now records whether each image's DAPI channel used auto or manual mode (`Ch1_Mode` column)
 
 ## What's new in v2.0
 
@@ -95,9 +100,16 @@ bar size). Some common values:
 ### 3. Channel Thresholds
 Each channel gets mapped to a color: **DAPI → blue, GFP → green, TxRed → red.**
 
-- **Ch1 (DAPI) brightness multiplier** — DAPI is auto-scaled to its own
-  min/max per image, then multiplied by this value to boost visibility.
-  Higher = brighter nuclei. Default: `2`.
+- **Ch1 (DAPI)** has two modes, toggled with the **"Auto-stretch per image"**
+  checkbox:
+  - **Auto-stretch (default)** — DAPI is automatically scaled to its own
+    min/max in each image, then multiplied by the **brightness multiplier**
+    field to boost visibility. Higher = brighter nuclei. Default: `2`.
+    This adapts per image, so it's a good hands-off default across a varied batch.
+  - **Manual** — uncheck the box to enter your own **min / max** values
+    instead, applied the same way as GFP/TxRed below. Useful when you want
+    identical DAPI scaling across every image in a batch rather than each
+    image auto-adjusting to its own brightness.
 - **Ch2 (GFP) min / max** — raw intensity values that get mapped to
   0–255 for the green channel. Anything below min shows as black; anything
   above max is fully green.
@@ -143,8 +155,10 @@ For every image with at least one channel present, you'll get:
 - One row in `metadata.csv` recording the filename, which channels were
   present, image dimensions, scale, and the threshold values actually used —
   so you can always trace back exactly how a given image was processed.
-  Threshold columns for any channel that wasn't present in that image are
-  left blank rather than showing values that weren't actually applied.
+  This includes a `Ch1_Mode` column showing whether DAPI used auto-stretch
+  or manual thresholds for that image. Threshold columns for any channel
+  that wasn't present in that image are left blank rather than showing
+  values that weren't actually applied.
 
 An image only gets skipped entirely if none of the three channels can be
 found for it. Any channel that's simply absent (no DAPI, no GFP, or no

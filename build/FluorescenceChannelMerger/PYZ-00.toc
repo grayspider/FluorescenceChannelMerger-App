@@ -1,6 +1,6 @@
 ('C:\\Users\\obfau\\OneDrive\\Documents\\2026 Summer\\Gaborski Lab Summer '
- "'26\\Claude - exe from py\\files - for windows - "
- 'Copy\\build\\FluorescenceChannelMerger\\PYZ-00.pyz',
+ "'26\\Claude - exe from py\\FluorescenceChannelMerger "
+ 'v3.0\\build\\FluorescenceChannelMerger\\PYZ-00.pyz',
  [('PIL',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PIL\\__init__.py',
    'PYMODULE'),
@@ -2389,6 +2389,9 @@
    'PYMODULE'),
   ('tkinter',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tkinter\\__init__.py',
+   'PYMODULE'),
+  ('tkinter.colorchooser',
+   'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tkinter\\colorchooser.py',
    'PYMODULE'),
   ('tkinter.commondialog',
    'C:\\Users\\obfau\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tkinter\\commondialog.py',
