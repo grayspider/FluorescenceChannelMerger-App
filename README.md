@@ -1,4 +1,5 @@
-# FluorescenceChannelMerger-App
+# Fluorescence Channel Merger
+### v3.0
 
 A simple desktop app for the Gaborski Lab that takes raw single-channel TIFF
 images from the microscope (DAPI, GFP, TxRed — any combination) and automatically:
@@ -11,10 +12,30 @@ images from the microscope (DAPI, GFP, TxRed — any combination) and automatica
 6. Logs all the settings used (per image) to a CSV file
 
 It can also process **multiple source folders at once**, running them
-concurrently rather than one at a time.
+concurrently rather than one at a time, and folders can be added by
+dragging and dropping them onto the window.
 
 No coding or command line needed — just run the app, add your folder(s), set
 your thresholds, and click **Run**.
+
+---
+
+## What's new in v3.1
+
+- Each channel's display color is now user-selectable via a color picker, instead of being fixed to DAPI=blue, GFP=green, TxRed=red
+- `metadata.csv` now records the exact color used for each channel per image (`Ch1_Color`, `Ch2_Color`, `Ch3_Color` columns)
+
+## What's new in v3.0
+
+- Manual min/max thresholding for the DAPI (Ch1) channel, same as GFP and TxRed — toggle between this and the original auto-stretch-per-image behavior with a single checkbox
+- `metadata.csv` now records whether each image's DAPI channel used auto or manual mode (`Ch1_Mode` column)
+
+## What's new in v2.0
+
+- Support for any combination of channels per image (previously required DAPI + GFP at minimum)
+- Batch processing of multiple source folders in a single run, processed concurrently
+- Drag-and-drop folders directly onto the app window
+- Per-image channel tracking in `metadata.csv` (blank columns for channels not present in a given image, instead of misleading values)
 
 ---
 
@@ -25,12 +46,14 @@ your thresholds, and click **Run**.
 
 **File naming:** your TIFF filenames need to contain (case-insensitive)
 whichever of these channels apply to that image:
-- `DAPI` for the blue nuclear channel
-- `GFP` for the green channel
-- `TxRed` for the red channel
+- `DAPI` for the nuclear channel
+- `GFP` for the green fluorescent protein channel
+- `TxRed` for the Texas Red channel
 
 Any single channel, any pair, or all three is fine — the app figures out
-what's present per image. You just need at least one of the three.
+what's present per image. You just need at least one of the three. Each
+channel's display color is customizable in the app (see below) — DAPI/GFP/TxRed
+are just the channel names/labels, not fixed colors.
 
 The app renames these automatically to `ch1`, `ch2`, `ch3` internally — you
 don't need to rename anything yourself, just make sure the original filenames
@@ -81,20 +104,33 @@ bar size). Some common values:
 - Leica 10x: `0.885`
 - Check your microscope's calibration if you're using a different objective/zoom.
 
-### 3. Channel Thresholds
-Each channel gets mapped to a color: **DAPI → blue, GFP → green, TxRed → red.**
+### 3. Channel Thresholds & Colors
+Each channel has a **Color** swatch button next to its threshold fields —
+click it to open a color picker and choose any color you want for that
+channel. Defaults are the traditional **DAPI → blue, GFP → green, TxRed →
+red**, but you're free to change any or all of them (useful for
+colorblind-friendly palettes, matching a figure style, or just personal
+preference). Colors blend additively where channels overlap, the same way
+real fluorescence channels do.
 
-- **Ch1 (DAPI) brightness multiplier** — DAPI is auto-scaled to its own
-  min/max per image, then multiplied by this value to boost visibility.
-  Higher = brighter nuclei. Default: `2`.
+- **Ch1 (DAPI)** has two threshold modes, toggled with the **"Auto-stretch per image"**
+  checkbox:
+  - **Auto-stretch (default)** — DAPI is automatically scaled to its own
+    min/max in each image, then multiplied by the **brightness multiplier**
+    field to boost visibility. Higher = brighter nuclei. Default: `2`.
+    This adapts per image, so it's a good hands-off default across a varied batch.
+  - **Manual** — uncheck the box to enter your own **min / max** values
+    instead, applied the same way as GFP/TxRed below. Useful when you want
+    identical DAPI scaling across every image in a batch rather than each
+    image auto-adjusting to its own brightness.
 - **Ch2 (GFP) min / max** — raw intensity values that get mapped to
-  0–255 for the green channel. Anything below min shows as black; anything
-  above max is fully green.
-- **Ch3 (TxRed) min / max** — same idea, for the red channel. If an image
+  full color intensity for that channel. Anything below min shows as black;
+  anything above max is fully saturated.
+- **Ch3 (TxRed) min / max** — same idea, for the TxRed channel. If an image
   doesn't have a TxRed file, these settings are simply ignored for that image
-  and the red channel stays blank. The same goes for Ch1/Ch2 settings if an
-  image is missing DAPI or GFP — you don't need to change anything based on
-  which channels a given folder happens to have.
+  and that channel's color stays out of the blend. The same goes for Ch1/Ch2
+  settings if an image is missing DAPI or GFP — you don't need to change
+  anything based on which channels a given folder happens to have.
 
 **Tip:** If everything looks too dim or too saturated, open one raw image in
 Fiji/ImageJ, check the actual pixel intensity range for that channel, and use
@@ -132,8 +168,11 @@ For every image with at least one channel present, you'll get:
 - One row in `metadata.csv` recording the filename, which channels were
   present, image dimensions, scale, and the threshold values actually used —
   so you can always trace back exactly how a given image was processed.
-  Threshold columns for any channel that wasn't present in that image are
-  left blank rather than showing values that weren't actually applied.
+  This includes a `Ch1_Mode` column showing whether DAPI used auto-stretch
+  or manual thresholds, and `Ch1_Color`/`Ch2_Color`/`Ch3_Color` columns
+  recording the exact color used for each channel in that image. Columns
+  for any channel that wasn't present in that image are left blank rather
+  than showing values that weren't actually applied.
 
 An image only gets skipped entirely if none of the three channels can be
 found for it. Any channel that's simply absent (no DAPI, no GFP, or no
