@@ -1,4 +1,6 @@
 numpy
 tifffile
 pillow
+scipy
+scikit-image
 pyinstaller

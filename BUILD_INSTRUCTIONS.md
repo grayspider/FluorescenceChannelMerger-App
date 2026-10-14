@@ -20,7 +20,7 @@ machine** (yours, a lab computer, whatever you'll actually use it on).
 
 Double-click `build_exe.bat` (or run it from Command Prompt in that folder).
 It will:
-1. Install `numpy`, `tifffile`, `pillow`, and `pyinstaller`
+1. Install `numpy`, `tifffile`, `pillow`, `scipy`, `scikit-image`, and `pyinstaller`
 2. Package the script into a single `.exe`
 3. Drop the result at `dist\FluorescenceChannelMerger.exe`
 
