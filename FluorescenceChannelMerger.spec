@@ -5,7 +5,7 @@ a = Analysis(
     ['FluorescenceChannelMerger.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('FluorescenceChannelMerger.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

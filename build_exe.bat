@@ -12,7 +12,7 @@ pip install -r requirements.txt
 
 echo.
 echo Building standalone executable...
-pyinstaller --onefile --windowed --icon=FluorescenceChannelMerger.ico --name "FluorescenceChannelMerger" FluorescenceChannelMerger.py
+pyinstaller --onefile --windowed --icon=FluorescenceChannelMerger.ico --add-data "FluorescenceChannelMerger.ico;." --name "FluorescenceChannelMerger" FluorescenceChannelMerger.py
 
 echo.
 echo ============================================================
