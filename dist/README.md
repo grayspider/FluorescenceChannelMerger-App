@@ -1,5 +1,5 @@
 # Fluorescence Channel Merger
-### v3.0
+### v3.2
 
 A simple desktop app for the Gaborski Lab that takes raw single-channel TIFF
 images from the microscope (DAPI, GFP, TxRed — any combination) and automatically:
@@ -10,6 +10,8 @@ images from the microscope (DAPI, GFP, TxRed — any combination) and automatica
 4. Adds a scale bar
 5. Exports a false-color RGB PNG for each image
 6. Logs all the settings used (per image) to a CSV file
+7. Counts cells from the DAPI channel (Fiji-style) and measures each
+   channel's intensity per image and per cell
 
 It can also process **multiple source folders at once**, running them
 concurrently rather than one at a time, and folders can be added by
@@ -19,6 +21,24 @@ No coding or command line needed — just run the app, add your folder(s), set
 your thresholds, and click **Run**.
 
 ---
+
+## What's new in v3.2
+
+- **Batch cell counting from DAPI**, using the same recipe you'd use in Fiji
+  (blur → auto-threshold → fill holes → watershed → Analyze Particles with a
+  size filter), run automatically on every image in every folder
+- **Average intensity of each channel** per image (whole image, inside cells,
+  and background)
+- **Per-cell intensities** for every channel (mean, integrated density, and
+  background-subtracted mean), one row per cell
+- An **outline overlay** PNG per image so you can check what was counted
+- The window now sizes itself to fit, so nothing gets cut off on
+  high-resolution / scaled displays
+
+## What's new in v3.1
+
+- Each channel's display color is now user-selectable via a color picker, instead of being fixed to DAPI=blue, GFP=green, TxRed=red
+- `metadata.csv` now records the exact color used for each channel per image (`Ch1_Color`, `Ch2_Color`, `Ch3_Color` columns)
 
 ## What's new in v3.0
 
@@ -41,12 +61,14 @@ your thresholds, and click **Run**.
 
 **File naming:** your TIFF filenames need to contain (case-insensitive)
 whichever of these channels apply to that image:
-- `DAPI` for the blue nuclear channel
-- `GFP` for the green channel
-- `TxRed` for the red channel
+- `DAPI` for the nuclear channel
+- `GFP` for the green fluorescent protein channel
+- `TxRed` for the Texas Red channel
 
 Any single channel, any pair, or all three is fine — the app figures out
-what's present per image. You just need at least one of the three.
+what's present per image. You just need at least one of the three. Each
+channel's display color is customizable in the app (see below) — DAPI/GFP/TxRed
+are just the channel names/labels, not fixed colors.
 
 The app renames these automatically to `ch1`, `ch2`, `ch3` internally — you
 don't need to rename anything yourself, just make sure the original filenames
@@ -97,10 +119,16 @@ bar size). Some common values:
 - Leica 10x: `0.885`
 - Check your microscope's calibration if you're using a different objective/zoom.
 
-### 3. Channel Thresholds
-Each channel gets mapped to a color: **DAPI → blue, GFP → green, TxRed → red.**
+### 3. Channel Thresholds & Colors
+Each channel has a **Color** swatch button next to its threshold fields —
+click it to open a color picker and choose any color you want for that
+channel. Defaults are the traditional **DAPI → blue, GFP → green, TxRed →
+red**, but you're free to change any or all of them (useful for
+colorblind-friendly palettes, matching a figure style, or just personal
+preference). Colors blend additively where channels overlap, the same way
+real fluorescence channels do.
 
-- **Ch1 (DAPI)** has two modes, toggled with the **"Auto-stretch per image"**
+- **Ch1 (DAPI)** has two threshold modes, toggled with the **"Auto-stretch per image"**
   checkbox:
   - **Auto-stretch (default)** — DAPI is automatically scaled to its own
     min/max in each image, then multiplied by the **brightness multiplier**
@@ -111,20 +139,60 @@ Each channel gets mapped to a color: **DAPI → blue, GFP → green, TxRed → r
     identical DAPI scaling across every image in a batch rather than each
     image auto-adjusting to its own brightness.
 - **Ch2 (GFP) min / max** — raw intensity values that get mapped to
-  0–255 for the green channel. Anything below min shows as black; anything
-  above max is fully green.
-- **Ch3 (TxRed) min / max** — same idea, for the red channel. If an image
+  full color intensity for that channel. Anything below min shows as black;
+  anything above max is fully saturated.
+- **Ch3 (TxRed) min / max** — same idea, for the TxRed channel. If an image
   doesn't have a TxRed file, these settings are simply ignored for that image
-  and the red channel stays blank. The same goes for Ch1/Ch2 settings if an
-  image is missing DAPI or GFP — you don't need to change anything based on
-  which channels a given folder happens to have.
+  and that channel's color stays out of the blend. The same goes for Ch1/Ch2
+  settings if an image is missing DAPI or GFP — you don't need to change
+  anything based on which channels a given folder happens to have.
 
 **Tip:** If everything looks too dim or too saturated, open one raw image in
 Fiji/ImageJ, check the actual pixel intensity range for that channel, and use
 those numbers as your min/max here. These settings apply to your whole batch,
 so use values that make sense across all the images you're processing together.
 
-### 4. Run All Folders
+### 4. Cell Counting & Intensities
+With **"Count cells and measure per-cell / per-image intensities"** checked
+(the default), every image that has a DAPI channel gets its nuclei
+segmented and counted, and every channel present gets measured. Untick it
+to skip this step and run exactly like v3.1.
+
+All measurements use the **raw pixel values** from the microscope, not the
+thresholded/colored PNG, so the display min/max settings above don't affect
+the numbers.
+
+How nuclei are found (each step mirrors what you'd do by hand in Fiji):
+1. **Blur sigma (px)** — Gaussian blur on DAPI to smooth out noise and
+   texture (Fiji: Process › Filters › Gaussian Blur). Default `2`; set `0` to skip.
+2. **Threshold** — the method used to separate nuclei from background.
+   `Otsu` (default), `Li`, `Triangle`, `Default (IsoData)` and `Mean` pick a
+   threshold automatically for each image (Fiji: Image › Adjust › Threshold).
+   Choose `Manual` to use a fixed raw DAPI value for every image instead —
+   useful if the auto methods pick up too much/too little in a dim or very
+   sparse image.
+3. Holes inside nuclei are filled.
+4. **Watershed** — splits touching/overlapping nuclei so they count as two
+   (Fiji: Process › Binary › Watershed). Turn it off if it's chopping single
+   nuclei in half.
+5. **Nucleus size min / max (µm²)** — objects outside this range are thrown
+   out, e.g. debris and specks below the min, or clumps above the max
+   (Fiji: Analyze Particles › Size). Default min `20` µm², no max.
+6. **Exclude nuclei on image edges** — drop nuclei cut off by the image
+   border (Fiji: Analyze Particles › Exclude on edges). Off by default.
+
+**Cell expansion (µm)** — DAPI only marks the nucleus, but GFP/TxRed signal
+is often in the cytoplasm. Setting this above `0` grows each nucleus outward
+by that distance (without overlapping its neighbors) and measures GFP/TxRed
+in that larger area, as an approximation of the whole cell. DAPI is always
+measured in the nucleus itself. Default `0` = measure everything inside the
+nucleus only.
+
+**Always open a few outline images** (see Output) the first time you use new
+settings or a new cell type, to check the counting looks right before
+trusting the numbers.
+
+### 5. Run All Folders
 Click **Run All Folders**. If you've added more than one folder, they're
 processed **concurrently** (at the same time), not one after another — so
 batching several folders together is faster than running the app separately
@@ -156,9 +224,43 @@ For every image with at least one channel present, you'll get:
   present, image dimensions, scale, and the threshold values actually used —
   so you can always trace back exactly how a given image was processed.
   This includes a `Ch1_Mode` column showing whether DAPI used auto-stretch
-  or manual thresholds for that image. Threshold columns for any channel
-  that wasn't present in that image are left blank rather than showing
-  values that weren't actually applied.
+  or manual thresholds, and `Ch1_Color`/`Ch2_Color`/`Ch3_Color` columns
+  recording the exact color used for each channel in that image. Columns
+  for any channel that wasn't present in that image are left blank rather
+  than showing values that weren't actually applied.
+
+### Cell counting output
+
+With cell counting on, each source folder also gets a
+`<foldername> - Cell Counts` folder containing:
+
+- **`cell_count_summary.csv`** — one row per image:
+  - `Cell_Count`, `Cells_per_mm2`, `Mean_Nucleus_Area_um2`,
+    `Total_Nucleus_Area_um2`, `Nucleus_Area_Fraction` (fraction of the image
+    covered by nuclei), plus the threshold method and the raw DAPI threshold
+    value that was actually used
+  - For each channel (`DAPI_`, `GFP_`, `TxRed_`):
+    - `_Image_Mean` — average intensity of the whole image
+    - `_Background` — median intensity of everything outside the cells
+    - `_Mean_In_Cells` — average of all pixels inside cells
+    - `_Mean_of_Cell_Means` — average of the per-cell means (each cell
+      weighted equally, regardless of size)
+- **`per_cell_measurements.csv`** — one row per cell, across all images in
+  the folder (the `Image` column says which image):
+  - `Cell` number (matches the number drawn on the outline image),
+    centroid `X_px`/`Y_px`, `Nucleus_Area_um2`, `Circularity` (1 = perfect
+    circle, like Fiji), and `Cell_Area_um2` when cell expansion is used
+  - For each channel: `_Mean`, `_IntDen` (integrated density = sum of all
+    pixel values in the cell, like Fiji's RawIntDen), and `_Mean_BgSub`
+    (mean minus that image's background)
+- **`outlines/<image>_outlines.png`** — the DAPI image in grayscale with
+  every counted nucleus outlined in yellow and numbered in cyan.
+
+Images without a DAPI channel can't be counted, but still get a summary row
+with their whole-image channel averages. Columns for channels an image
+doesn't have are left blank, the same as in `metadata.csv`.
+
+These CSVs open directly in Excel, Prism, R, or Python for plotting and stats.
 
 An image only gets skipped entirely if none of the three channels can be
 found for it. Any channel that's simply absent (no DAPI, no GFP, or no
@@ -177,6 +279,11 @@ channels it does have, with the missing ones left blank in the final PNG.
 | Colors look washed out / too dark | Adjust the min/max threshold for that channel — check real pixel values in Fiji first |
 | SmartScreen blocks the app | Click "More info" → "Run anyway" (unsigned executable, expected) |
 | Antivirus quarantines the file | Some AV software is aggressive with unsigned PyInstaller apps — whitelist the file, or ask IT to allow it |
+| Cell count is too high (background or debris counted) | Raise the nucleus size min, increase blur sigma, or switch to `Manual` with a value above the one shown in `DAPI_Threshold` (`Li` and `Triangle` are usually more inclusive than `Otsu`, so avoid those here) |
+| Cell count is too low (dim nuclei missed) | Try `Li` or `Triangle`, or a `Manual` threshold below the value shown in `DAPI_Threshold` |
+| Single nuclei split in two on the outline image | Untick Watershed, or increase blur sigma |
+| Clumps of nuclei counted as one | Make sure Watershed is on; set a nucleus size max to drop large clumps you can't split |
+| `Cell_Count` is blank for an image | That image has no DAPI channel, so there's nothing to count |
 | Output folders don't open automatically | Only happens automatically on Windows, and only after the whole batch finishes; the files are still there, just navigate to the `- PNG` folder manually |
 
 ---
@@ -185,7 +292,7 @@ channels it does have, with the missing ones left blank in the final PNG.
 
 The source code (`FluorescenceChannelMerger.py`) is included alongside the
 `.exe`. It's a single-file Python script (Tkinter GUI + numpy/tifffile/Pillow
-for image processing). If you need to rebuild the `.exe` after making
+for image processing, and scipy/scikit-image for cell segmentation). If you need to rebuild the `.exe` after making
 changes, see `BUILD_INSTRUCTIONS.md` — it walks through the one-command
 PyInstaller build.
 
