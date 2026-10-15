@@ -3,4 +3,7 @@ tifffile
 pillow
 scipy
 scikit-image
+sv-ttk
+darkdetect
+tkinterdnd2
 pyinstaller

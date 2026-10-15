@@ -1,7 +1,7 @@
 """
 Fluorescence Channel Merger & Thresholder
 ------------------------------------------
-Version: 3.2
+Version: 4.0
 Author: Owen Faust, Rochester Institute of Technology, June 2026.
 Created with the help of Claude AI.
 
@@ -23,33 +23,54 @@ every channel is measured inside each nucleus (optionally expanded outward to
 approximate the whole cell). Results go to per-image summary and per-cell
 CSVs, plus an outline overlay PNG per image for checking the segmentation.
 
+v4.0 is a visual refresh: a Windows 11-style interface (Sun Valley theme) with
+light and dark modes that follow the Windows setting, sharp text on scaled
+displays, a two-column card layout, hover help on every setting, and a
+color-coded log. The image pipeline itself is unchanged from v3.2.
+
 Run with:  python FluorescenceChannelMerger.py
 Requires:  numpy, tifffile, pillow, scipy, scikit-image
            (tkinter ships with standard Python)
 Optional:  tkinterdnd2 (enables drag-and-drop folder support; the app runs
-           fine without it, just using the "Add Folder..." dialog instead)
+           fine without it, just using the "Add folder" button instead)
+           sv-ttk + darkdetect (modern theme and automatic dark mode; without
+           them the app falls back to the plain Tk look)
 """
 
 import os
 import re
+import sys
 import csv
+import ctypes
 import contextlib
 import threading
 import concurrent.futures
 import numpy as np
 import tifffile
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 from scipy import ndimage as ndi
 from skimage import feature, filters, measure, segmentation
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, colorchooser
+from tkinter import font as tkfont
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     DND_AVAILABLE = True
 except ImportError:
     DND_AVAILABLE = False
+
+try:
+    import sv_ttk
+    SV_TTK_AVAILABLE = True
+except ImportError:
+    SV_TTK_AVAILABLE = False
+
+try:
+    import darkdetect
+except ImportError:
+    darkdetect = None
 
 
 # ── PIPELINE (same logic as the CLI script, wrapped as functions) ───────────
@@ -534,16 +555,143 @@ def run_pipeline(source, pixels_per_um, ch1_auto, ch1_min_setting, ch1_max_setti
 
 # ── GUI ───────────────────────────────────────────────────────────────────
 
+APP_VERSION = "4.0"
+ICON_FILE = "FluorescenceChannelMerger.ico"
+
+# Colors for the few classic Tk widgets (folder list, log, tooltips) that the
+# Sun Valley theme doesn't style itself -- matched to the theme's own colors.
+PALETTES = {
+    "dark": {
+        "bg": "#1c1c1c", "surface": "#232323", "fg": "#fafafa", "muted": "#9e9e9e",
+        "border": "#3a3a3a", "accent": "#57c8ff", "accent_fg": "#1c1c1c",
+        "ok": "#6ccb5f", "warn": "#fce100", "error": "#ff99a4",
+    },
+    "light": {
+        "bg": "#fafafa", "surface": "#ffffff", "fg": "#1c1c1c", "muted": "#616161",
+        "border": "#d9d9d9", "accent": "#0560b6", "accent_fg": "#ffffff",
+        "ok": "#0f7b0f", "warn": "#9d5d00", "error": "#c42b1c",
+    },
+}
+
+# Hover help shown on the (i) icons next to each setting.
+HELP = {
+    "scale": "Pixels per micron for your objective and camera. Sets the 100 µm "
+             "scale bar and converts all areas to µm². Leica 10x = 0.885.",
+    "channels": "Min / Max are the raw intensities shown as black and as full color "
+                "in the PNGs. They only affect the pictures, never the measurements. "
+                "Click a color dot to change that channel's display color.",
+    "ch1_auto": "On: DAPI is stretched to its own darkest/brightest pixel in every "
+                "image, then multiplied by the brightness factor. Off: use a fixed "
+                "Min / Max for every image, like GFP and TxRed.",
+    "count": "Find nuclei in the DAPI channel, count them, and measure every channel "
+             "per image and per cell. Results go to '<folder> - Cell Counts'.",
+    "threshold": "How nucleus pixels are told apart from background. Otsu is a good "
+                 "default; Li and Triangle are more inclusive (catch dimmer nuclei). "
+                 "Manual uses the raw DAPI value you type for every image.",
+    "blur": "Gaussian blur on DAPI before thresholding, to smooth noise and grainy "
+            "texture. Raise it if single nuclei break into pieces; 0 = off.",
+    "expansion": "Grow each nucleus outward by this many µm (without overlapping its "
+                 "neighbours) and measure GFP/TxRed there, to capture cytoplasmic "
+                 "signal. DAPI is always measured in the nucleus. 0 = nucleus only.",
+    "size": "Objects smaller than Min (debris, specks) or larger than Max (clumps) "
+            "are ignored. In µm², using your pixels-per-micron. Leave Max blank for "
+            "no upper limit.",
+    "watershed": "Split touching or overlapping nuclei so they count separately. "
+                 "Turn off if single nuclei are being cut in half.",
+    "edges": "Ignore nuclei cut off by the image border. Better per-cell numbers, "
+             "but the total count will be a little lower.",
+}
+
+
+def resource_path(name):
+    """Path to a file shipped next to the script, or inside the PyInstaller exe."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, name)
+
+
+def enable_dpi_awareness():
+    """Ask Windows not to bitmap-stretch the window on scaled (125%/150%)
+    displays, which makes all text blurry. Must run before the window exists."""
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass  # not Windows, or too old -- harmless
+
+
+def set_title_bar_theme(window, dark):
+    """Make the Windows 10/11 title bar match the app's light/dark mode."""
+    try:
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+        value = ctypes.c_int(1 if dark else 0)
+        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (new, old builds)
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
+                break
+    except Exception:
+        pass
+
+
+class Tooltip:
+    """Small help bubble that appears when hovering over a widget."""
+
+    def __init__(self, app, widget, text):
+        self.app, self.widget, self.text = app, widget, text
+        self.window = None
+        self._after_id = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+
+    def _schedule(self, _event=None):
+        self._after_id = self.widget.after(350, self._show)
+
+    def _show(self):
+        if self.window is not None:
+            return
+        p = self.app.palette
+        x = self.widget.winfo_rootx() + self.widget.winfo_width() + self.app.px(6)
+        y = self.widget.winfo_rooty() - self.app.px(4)
+        self.window = tk.Toplevel(self.widget)
+        self.window.wm_overrideredirect(True)
+        self.window.wm_geometry(f"+{x}+{y}")
+        tk.Label(
+            self.window, text=self.text, justify="left", wraplength=self.app.px(300),
+            bg=p["surface"], fg=p["fg"], font=("Segoe UI", 9),
+            padx=self.app.px(10), pady=self.app.px(7),
+            highlightthickness=1, highlightbackground=p["border"], bd=0,
+        ).pack()
+
+    def _hide(self, _event=None):
+        if self._after_id:
+            self.widget.after_cancel(self._after_id)
+            self._after_id = None
+        if self.window is not None:
+            self.window.destroy()
+            self.window = None
+
+
 _BaseWindow = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
 
 
 class App(_BaseWindow):
     def __init__(self):
         super().__init__()
-        self.title("Fluorescence Channel Merger v3.2")
-        # No fixed geometry: the window sizes itself to fit its contents, so
-        # nothing gets cut off under Windows display scaling (125%/150%).
-        self.resizable(False, True)
+        self.withdraw()  # build everything first, then show -- avoids a flicker
+        self.title("Fluorescence Channel Merger")
+
+        # Tk reports how many pixels a point is; 96 dpi (100% scaling) = 1.333.
+        self._scale = float(self.tk.call("tk", "scaling")) / (96 / 72)
+
+        icon_path = resource_path(ICON_FILE)
+        self._icon_image = None
+        if os.path.exists(icon_path):
+            try:
+                self.iconbitmap(default=icon_path)
+                header_icon = Image.open(icon_path).convert("RGBA")
+                header_icon = header_icon.resize((self.px(36), self.px(36)), Image.LANCZOS)
+                self._icon_image = ImageTk.PhotoImage(header_icon)
+            except Exception:
+                pass
 
         self.source_folders = []  # list of folder paths queued for processing
         self.pixels_per_um = tk.StringVar(value="0.885")
@@ -573,193 +721,385 @@ class App(_BaseWindow):
         self.count_exclude_edges = tk.BooleanVar(value=False)
         self.count_expansion = tk.StringVar(value="0")
 
-        pad = {"padx": 10, "pady": 6}
+        system_dark = darkdetect.isDark() if darkdetect is not None else False
+        self.dark_mode = tk.BooleanVar(value=bool(system_dark))
+        self.status_text = tk.StringVar(value="Ready")
+        self.folder_count_text = tk.StringVar()
 
-        # Folder selection (multiple folders supported)
-        folder_frame_title = "Source Folders (drag & drop folders here, or use Add Folder...)" \
-            if DND_AVAILABLE else "Source Folders (processed together, same settings)"
-        frame_folder = ttk.LabelFrame(self, text=folder_frame_title)
-        frame_folder.pack(fill="x", **pad)
+        self._swatches = []  # (label widget, color var) pairs, redrawn on theme change
+        mono_families = set(tkfont.families())
+        self._mono_font = ("Cascadia Mono" if "Cascadia Mono" in mono_families else "Consolas", 9)
 
-        if not DND_AVAILABLE:
-            ttk.Label(
-                frame_folder,
-                text="Tip: install the 'tkinterdnd2' package to enable drag-and-drop here.",
-                foreground="#666666"
-            ).pack(anchor="w", padx=8, pady=(6, 0))
+        self._apply_theme()
+        self._build_header()
+        self._build_body()
+        self._apply_palette()
+        self._update_ch1_mode_state()
+        self._update_count_state()
+        self._update_folder_count()
 
-        list_row = ttk.Frame(frame_folder)
-        list_row.pack(fill="x", padx=8, pady=8)
-        self.folder_listbox = tk.Listbox(list_row, height=5, selectmode="extended")
-        self.folder_listbox.pack(side="left", fill="x", expand=True)
-        scrollbar = ttk.Scrollbar(list_row, orient="vertical", command=self.folder_listbox.yview)
-        scrollbar.pack(side="left", fill="y")
+        self.update_idletasks()
+        self.minsize(self.winfo_reqwidth(), min(self.winfo_reqheight(), self.px(640)))
+        self.deiconify()
+        set_title_bar_theme(self, self.dark_mode.get())
+
+    # ── theme ──────────────────────────────────────────────────────────────
+
+    def px(self, n):
+        """Scale a layout size given for a 100%-scaled display."""
+        return int(round(n * self._scale))
+
+    @property
+    def palette(self):
+        return PALETTES["dark" if self.dark_mode.get() else "light"]
+
+    def _apply_theme(self):
+        if SV_TTK_AVAILABLE:
+            sv_ttk.set_theme("dark" if self.dark_mode.get() else "light")
+            # Sun Valley sizes its fonts in screen pixels, which comes out tiny
+            # on scaled displays; switch them to point sizes so they scale.
+            for name, size in (("SunValleyCaptionFont", 9), ("SunValleyBodyFont", 10),
+                               ("SunValleyBodyStrongFont", 10), ("SunValleyBodyLargeFont", 12),
+                               ("SunValleySubtitleFont", 14), ("SunValleyTitleFont", 18),
+                               ("SunValleyTitleLargeFont", 24), ("SunValleyDisplayFont", 36)):
+                try:
+                    tkfont.nametofont(name).configure(size=size)
+                except tk.TclError:
+                    pass
+
+        p = self.palette
+        style = ttk.Style(self)
+        style.configure("Title.TLabel", font=("Segoe UI Semibold", 17))
+        style.configure("Subtitle.TLabel", font=("Segoe UI", 10), foreground=p["muted"])
+        style.configure("Heading.TLabel", font=("Segoe UI Semibold", 12))
+        style.configure("Muted.TLabel", foreground=p["muted"])
+        style.configure("Caption.TLabel", font=("Segoe UI", 9), foreground=p["muted"])
+        style.configure("Info.TLabel", font=("Segoe UI", 10), foreground=p["muted"])
+        style.configure("Status.TLabel", foreground=p["muted"])
+        style.configure("StatusOk.TLabel", foreground=p["ok"])
+        style.configure("StatusError.TLabel", foreground=p["error"])
+        style.configure("Run.Accent.TButton", font=("Segoe UI Semibold", 11),
+                        padding=(self.px(22), self.px(8)))
+
+    def _apply_palette(self):
+        """Recolor the classic Tk widgets the theme doesn't reach."""
+        p = self.palette
+        shared = dict(bg=p["surface"], fg=p["fg"], highlightbackground=p["border"],
+                      highlightcolor=p["accent"], selectbackground=p["accent"],
+                      selectforeground=p["accent_fg"])
+        self.folder_listbox.config(**shared)
+        self.folder_placeholder.config(bg=p["surface"], fg=p["muted"])
+        self.log_text.config(insertbackground=p["fg"], **shared)
+        self.log_text.tag_configure("error", foreground=p["error"])
+        self.log_text.tag_configure("ok", foreground=p["ok"])
+        self.log_text.tag_configure("warn", foreground=p["warn"])
+        self.log_text.tag_configure("dim", foreground=p["muted"])
+        self.log_text.tag_configure("step", font=(self._mono_font[0], self._mono_font[1], "bold"))
+        for swatch, color_var in self._swatches:
+            self._draw_swatch(swatch, color_var.get())
+
+    def toggle_dark_mode(self):
+        self._apply_theme()
+        self._apply_palette()
+        self._set_status(self.status_text.get(), self._status_kind)
+        set_title_bar_theme(self, self.dark_mode.get())
+
+    # ── layout helpers ─────────────────────────────────────────────────────
+
+    def _card(self, parent, title, help_key=None):
+        """A rounded panel with a heading. Returns (card, header_frame)."""
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(self.px(16), self.px(12)))
+        header = ttk.Frame(card)
+        header.grid(row=0, column=0, columnspan=6, sticky="ew", pady=(0, self.px(10)))
+        ttk.Label(header, text=title, style="Heading.TLabel").pack(side="left")
+        if help_key:
+            self._info_icon(header, help_key).pack(side="left", padx=(self.px(6), 0))
+        return card, header
+
+    def _info_icon(self, parent, help_key):
+        icon = ttk.Label(parent, text="ⓘ", style="Info.TLabel", cursor="hand2")
+        Tooltip(self, icon, HELP[help_key])
+        return icon
+
+    def _setting_label(self, parent, text, help_key=None):
+        frame = ttk.Frame(parent)
+        ttk.Label(frame, text=text).pack(side="left")
+        if help_key:
+            self._info_icon(frame, help_key).pack(side="left", padx=(self.px(4), 0))
+        return frame
+
+    def _entry(self, parent, variable, width=8):
+        return ttk.Entry(parent, textvariable=variable, width=width, justify="right")
+
+    def _make_swatch(self, parent, color_var, label):
+        swatch = ttk.Label(parent, cursor="hand2")
+        swatch.bind("<Button-1>", lambda e: self.pick_color(color_var, swatch, label))
+        Tooltip(self, swatch, f"{label} display color — click to change")
+        self._swatches.append((swatch, color_var))
+        self._draw_swatch(swatch, color_var.get())
+        return swatch
+
+    def _draw_swatch(self, swatch, hex_color):
+        # Drawn at 4x and scaled down so the rounded edge is smooth.
+        size = self.px(22)
+        big = Image.new("RGBA", (size * 4, size * 4), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(big)
+        draw.rounded_rectangle([2, 2, size * 4 - 3, size * 4 - 3], radius=size,
+                               fill=hex_color, outline=self.palette["border"], width=6)
+        swatch.image = ImageTk.PhotoImage(big.resize((size, size), Image.LANCZOS))
+        swatch.config(image=swatch.image)
+
+    # ── layout ─────────────────────────────────────────────────────────────
+
+    def _build_header(self):
+        header = ttk.Frame(self, padding=(self.px(24), self.px(18), self.px(24), self.px(14)))
+        header.pack(fill="x")
+        if self._icon_image is not None:
+            ttk.Label(header, image=self._icon_image).pack(side="left", padx=(0, self.px(12)))
+        titles = ttk.Frame(header)
+        titles.pack(side="left")
+        ttk.Label(titles, text="Fluorescence Channel Merger", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(titles, text=f"Merge · threshold · count cells   —   Gaborski Lab · v{APP_VERSION}",
+                  style="Subtitle.TLabel").pack(anchor="w")
+        ttk.Checkbutton(header, text="Dark mode", variable=self.dark_mode,
+                        style="Switch.TCheckbutton", command=self.toggle_dark_mode
+                        ).pack(side="right")
+
+    def _build_body(self):
+        body = ttk.Frame(self, padding=(self.px(24), 0, self.px(24), self.px(20)))
+        body.pack(fill="both", expand=True)
+        body.columnconfigure(1, weight=1)
+        body.rowconfigure(0, weight=1)
+
+        left = ttk.Frame(body)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, self.px(16)))
+        right = ttk.Frame(body)
+        right.grid(row=0, column=1, sticky="nsew")
+
+        self._build_scale_card(left).pack(fill="x", pady=(0, self.px(12)))
+        self._build_channels_card(left).pack(fill="x", pady=(0, self.px(12)))
+        self._build_count_card(left).pack(fill="x")
+
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(2, weight=1)
+        self._build_folders_card(right).grid(row=0, column=0, sticky="nsew", pady=(0, self.px(12)))
+        self._build_run_row(right).grid(row=1, column=0, sticky="ew", pady=(0, self.px(12)))
+        self._build_log_card(right).grid(row=2, column=0, sticky="nsew")
+
+    def _build_scale_card(self, parent):
+        card, _ = self._card(parent, "Microscope", "scale")
+        ttk.Label(card, text="Pixels per micron").grid(row=1, column=0, sticky="w")
+        self._entry(card, self.pixels_per_um, 10).grid(row=1, column=1, padx=self.px(10))
+        ttk.Label(card, text="Leica 10x = 0.885", style="Caption.TLabel").grid(row=1, column=2, sticky="w")
+        return card
+
+    def _build_channels_card(self, parent):
+        card, _ = self._card(parent, "Channels", "channels")
+        gap = {"padx": (self.px(10), 0), "pady": self.px(4)}
+
+        # Min/Max column headings: one pair above DAPI (only shown in manual
+        # mode, when DAPI actually has min/max fields) and one above GFP/TxRed.
+        self.ch1_headings = [
+            ttk.Label(card, text=text, style="Caption.TLabel") for text in ("Min", "Max")]
+        for column, heading in zip((2, 3), self.ch1_headings):
+            heading.grid(row=1, column=column, sticky="w", padx=gap["padx"])
+        for column, text in ((2, "Min"), (3, "Max")):
+            ttk.Label(card, text=text, style="Caption.TLabel").grid(
+                row=5, column=column, sticky="w", padx=gap["padx"])
+
+        # DAPI: either a brightness factor (auto-stretch) or a fixed min/max
+        self._make_swatch(card, self.ch1_color, "DAPI (Ch1)").grid(row=2, column=0, padx=(0, self.px(10)))
+        ttk.Label(card, text="DAPI", style="Heading.TLabel").grid(row=2, column=1, sticky="w")
+        self.ch1_min_entry = self._entry(card, self.ch1_min)
+        self.ch1_min_entry.grid(row=2, column=2, **gap)
+        self.ch1_max_entry = self._entry(card, self.ch1_max)
+        self.ch1_max_entry.grid(row=2, column=3, **gap)
+        self.ch1_brightness_frame = ttk.Frame(card)
+        self.ch1_brightness_frame.grid(row=2, column=2, columnspan=2, sticky="w", **gap)
+        ttk.Label(self.ch1_brightness_frame, text="Brightness ×").pack(side="left")
+        self._entry(self.ch1_brightness_frame, self.ch1_brightness, 6).pack(side="left", padx=(self.px(8), 0))
+
+        auto_row = ttk.Frame(card)
+        auto_row.grid(row=3, column=1, columnspan=3, sticky="w", pady=(0, self.px(4)))
+        ttk.Checkbutton(auto_row, text="Auto-stretch each image", variable=self.ch1_auto_var,
+                        style="Switch.TCheckbutton", command=self._update_ch1_mode_state).pack(side="left")
+        self._info_icon(auto_row, "ch1_auto").pack(side="left", padx=(self.px(4), 0))
+
+        ttk.Separator(card).grid(row=4, column=0, columnspan=4, sticky="ew", pady=self.px(8))
+
+        for row, name, label, color_var, min_var, max_var in (
+                (6, "GFP", "GFP (Ch2)", self.ch2_color, self.ch2_min, self.ch2_max),
+                (7, "TxRed", "TxRed (Ch3)", self.ch3_color, self.ch3_min, self.ch3_max)):
+            self._make_swatch(card, color_var, label).grid(row=row, column=0, padx=(0, self.px(10)))
+            ttk.Label(card, text=name, style="Heading.TLabel").grid(row=row, column=1, sticky="w")
+            self._entry(card, min_var).grid(row=row, column=2, **gap)
+            self._entry(card, max_var).grid(row=row, column=3, **gap)
+        return card
+
+    def _build_count_card(self, parent):
+        card, header = self._card(parent, "Cell counting", "count")
+        ttk.Checkbutton(header, variable=self.count_enabled, style="Switch.TCheckbutton",
+                        command=self._update_count_state).pack(side="right")
+        pad = {"pady": self.px(4)}
+        right_pad = {"padx": (self.px(10), self.px(18)), "pady": self.px(4)}
+
+        self._setting_label(card, "Threshold", "threshold").grid(row=1, column=0, sticky="w", **pad)
+        self.count_method_combo = ttk.Combobox(
+            card, textvariable=self.count_method, state="readonly", width=15,
+            values=list(THRESHOLD_METHODS) + ["Manual"])
+        self.count_method_combo.grid(row=1, column=1, columnspan=2, sticky="w", **right_pad)
+        self.count_method_combo.bind("<<ComboboxSelected>>", lambda e: self._update_count_state())
+        self.count_manual_label = ttk.Label(card, text="Value")
+        self.count_manual_label.grid(row=1, column=3, sticky="w", **pad)
+        self.count_manual_entry = self._entry(card, self.count_manual_threshold)
+        self.count_manual_entry.grid(row=1, column=4, sticky="w", padx=(self.px(10), 0), **pad)
+
+        self._setting_label(card, "Blur σ (px)", "blur").grid(row=2, column=0, sticky="w", **pad)
+        self.count_blur_entry = self._entry(card, self.count_blur)
+        self.count_blur_entry.grid(row=2, column=1, sticky="w", **right_pad)
+        self._setting_label(card, "Expand (µm)", "expansion").grid(row=2, column=3, sticky="w", **pad)
+        self.count_expansion_entry = self._entry(card, self.count_expansion)
+        self.count_expansion_entry.grid(row=2, column=4, sticky="w", padx=(self.px(10), 0), **pad)
+
+        self._setting_label(card, "Size min (µm²)", "size").grid(row=3, column=0, sticky="w", **pad)
+        self.count_min_entry = self._entry(card, self.count_min_area)
+        self.count_min_entry.grid(row=3, column=1, sticky="w", **right_pad)
+        ttk.Label(card, text="Max (µm²)").grid(row=3, column=3, sticky="w", **pad)
+        self.count_max_entry = self._entry(card, self.count_max_area)
+        self.count_max_entry.grid(row=3, column=4, sticky="w", padx=(self.px(10), 0), **pad)
+
+        switches = ttk.Frame(card)
+        switches.grid(row=4, column=0, columnspan=5, sticky="w", pady=(self.px(8), 0))
+        self.count_watershed_check = ttk.Checkbutton(
+            switches, text="Split touching nuclei", variable=self.count_watershed,
+            style="Switch.TCheckbutton")
+        self.count_watershed_check.pack(side="left")
+        self._info_icon(switches, "watershed").pack(side="left", padx=(self.px(4), self.px(20)))
+        self.count_edges_check = ttk.Checkbutton(
+            switches, text="Skip edge nuclei", variable=self.count_exclude_edges,
+            style="Switch.TCheckbutton")
+        self.count_edges_check.pack(side="left")
+        self._info_icon(switches, "edges").pack(side="left", padx=(self.px(4), 0))
+        return card
+
+    def _build_folders_card(self, parent):
+        card, header = self._card(parent, "Source folders")
+        ttk.Label(header, textvariable=self.folder_count_text, style="Caption.TLabel").pack(
+            side="left", padx=(self.px(10), 0), pady=(self.px(3), 0))
+        self.add_button = ttk.Button(header, text="＋  Add folder", command=self.add_folder)
+        self.add_button.pack(side="right")
+        card.columnconfigure(0, weight=1)
+        card.rowconfigure(1, weight=1)
+
+        list_frame = ttk.Frame(card)
+        list_frame.grid(row=1, column=0, columnspan=6, sticky="nsew")
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+        self.folder_listbox = tk.Listbox(
+            list_frame, height=5, width=48, selectmode="extended", activestyle="none",
+            relief="flat", bd=0, highlightthickness=1, font=("Segoe UI", 10))
+        self.folder_listbox.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.folder_listbox.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns", padx=(self.px(4), 0))
         self.folder_listbox.config(yscrollcommand=scrollbar.set)
 
+        hint = ("Drag folders here, or click  ＋ Add folder" if DND_AVAILABLE
+                else "Click  ＋ Add folder  to choose a folder of .tif files")
+        self.folder_placeholder = tk.Label(self.folder_listbox, text=hint,
+                                           font=("Segoe UI", 10), cursor="hand2")
+        self.folder_placeholder.bind("<Button-1>", lambda e: self.add_folder())
+
         if DND_AVAILABLE:
-            # Register both the listbox and the surrounding frame as drop targets
-            # so dropping anywhere in that area works, not just exactly on the list.
-            for widget in (self.folder_listbox, frame_folder, list_row):
+            # Dropping anywhere on the card works, not just exactly on the list.
+            for widget in (self.folder_listbox, self.folder_placeholder, card, list_frame):
                 widget.drop_target_register(DND_FILES)
                 widget.dnd_bind("<<Drop>>", self.on_drop)
 
-        button_row = ttk.Frame(frame_folder)
-        button_row.pack(fill="x", padx=8, pady=(0, 8))
-        self.add_button = ttk.Button(button_row, text="Add Folder...", command=self.add_folder)
-        self.add_button.pack(side="left", padx=(0, 6))
-        self.remove_button = ttk.Button(button_row, text="Remove Selected", command=self.remove_selected)
-        self.remove_button.pack(side="left", padx=(0, 6))
-        self.clear_button = ttk.Button(button_row, text="Clear All", command=self.clear_folders)
-        self.clear_button.pack(side="left")
+        buttons = ttk.Frame(card)
+        buttons.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(self.px(10), 0))
+        self.remove_button = ttk.Button(buttons, text="Remove selected", command=self.remove_selected)
+        self.remove_button.pack(side="left")
+        self.clear_button = ttk.Button(buttons, text="Clear all", command=self.clear_folders)
+        self.clear_button.pack(side="left", padx=(self.px(8), 0))
+        ttk.Label(buttons, text="Settings on the left apply to every folder",
+                  style="Caption.TLabel").pack(side="right")
+        return card
 
-        # Scale
-        frame_scale = ttk.LabelFrame(self, text="Microscope Scale")
-        frame_scale.pack(fill="x", **pad)
-        ttk.Label(frame_scale, text="Pixels per micron:").grid(row=0, column=0, sticky="w", padx=8, pady=8)
-        ttk.Entry(frame_scale, textvariable=self.pixels_per_um, width=12).grid(row=0, column=1, padx=8, pady=8)
-        ttk.Label(frame_scale, text="(e.g. 0.885 for Leica 10x)").grid(row=0, column=2, sticky="w", padx=8)
+    def _build_run_row(self, parent):
+        row = ttk.Frame(parent)
+        row.columnconfigure(1, weight=1)
+        self.run_button = ttk.Button(row, text="▶  Run all folders", style="Run.Accent.TButton",
+                                     command=self.start_run)
+        self.run_button.grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, self.px(16)))
+        self.status_label = ttk.Label(row, textvariable=self.status_text, style="Status.TLabel")
+        self.status_label.grid(row=0, column=1, sticky="w")
+        self._status_kind = "idle"
+        # Empty while idle, sweeping while running, full when finished
+        self.progress = ttk.Progressbar(row, mode="determinate", value=0)
+        self.progress.grid(row=1, column=1, sticky="ew", pady=(self.px(4), 0))
+        return row
 
-        # Channel thresholds
-        frame_thresh = ttk.LabelFrame(self, text="Channel Thresholds (applied to every folder above)")
-        frame_thresh.pack(fill="x", **pad)
+    def _build_log_card(self, parent):
+        card, header = self._card(parent, "Log")
+        ttk.Button(header, text="Clear", command=self._clear_log).pack(side="right")
+        card.columnconfigure(0, weight=1)
+        card.rowconfigure(1, weight=1)
+        self.log_text = tk.Text(
+            card, wrap="word", width=60, height=11, state="disabled", relief="flat", bd=0,
+            highlightthickness=1, font=self._mono_font, padx=self.px(10), pady=self.px(8))
+        self.log_text.grid(row=1, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(card, orient="vertical", command=self.log_text.yview)
+        scrollbar.grid(row=1, column=1, sticky="ns", padx=(self.px(4), 0))
+        self.log_text.config(yscrollcommand=scrollbar.set)
+        return card
 
-        ttk.Label(frame_thresh, text="Ch1 (DAPI):").grid(
-            row=0, column=0, sticky="w", padx=8, pady=6)
-        self.ch1_auto_check = ttk.Checkbutton(
-            frame_thresh, text="Auto-stretch per image", variable=self.ch1_auto_var,
-            command=self._update_ch1_mode_state
-        )
-        self.ch1_auto_check.grid(row=0, column=1, columnspan=3, sticky="w", padx=8, pady=6)
-        ttk.Label(frame_thresh, text="Color:").grid(row=0, column=4, sticky="w", padx=(4, 2))
-        self.ch1_color_button = tk.Button(
-            frame_thresh, text="  ", width=3, bg=self.ch1_color.get(),
-            command=lambda: self.pick_color(self.ch1_color, self.ch1_color_button, "DAPI (Ch1)")
-        )
-        self.ch1_color_button.grid(row=0, column=5, padx=(0, 8))
+    # ── state updates ──────────────────────────────────────────────────────
 
-        ttk.Label(frame_thresh, text="  Brightness multiplier (auto-stretch only):").grid(
-            row=1, column=0, sticky="w", padx=8, pady=6)
-        self.ch1_brightness_entry = ttk.Entry(frame_thresh, textvariable=self.ch1_brightness, width=10)
-        self.ch1_brightness_entry.grid(row=1, column=1, padx=8, pady=6)
-
-        ttk.Label(frame_thresh, text="  Manual min:").grid(row=2, column=0, sticky="w", padx=8, pady=6)
-        self.ch1_min_entry = ttk.Entry(frame_thresh, textvariable=self.ch1_min, width=10)
-        self.ch1_min_entry.grid(row=2, column=1, padx=8, pady=6)
-        ttk.Label(frame_thresh, text="max:").grid(row=2, column=2, sticky="w")
-        self.ch1_max_entry = ttk.Entry(frame_thresh, textvariable=self.ch1_max, width=10)
-        self.ch1_max_entry.grid(row=2, column=3, padx=8, pady=6)
-
-        ttk.Separator(frame_thresh, orient="horizontal").grid(
-            row=3, column=0, columnspan=6, sticky="ew", padx=8, pady=6)
-
-        ttk.Label(frame_thresh, text="Ch2 (GFP) min:").grid(row=4, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(frame_thresh, textvariable=self.ch2_min, width=10).grid(row=4, column=1, padx=8, pady=6)
-        ttk.Label(frame_thresh, text="max:").grid(row=4, column=2, sticky="w")
-        ttk.Entry(frame_thresh, textvariable=self.ch2_max, width=10).grid(row=4, column=3, padx=8, pady=6)
-        ttk.Label(frame_thresh, text="Color:").grid(row=4, column=4, sticky="w", padx=(4, 2))
-        self.ch2_color_button = tk.Button(
-            frame_thresh, text="  ", width=3, bg=self.ch2_color.get(),
-            command=lambda: self.pick_color(self.ch2_color, self.ch2_color_button, "GFP (Ch2)")
-        )
-        self.ch2_color_button.grid(row=4, column=5, padx=(0, 8))
-
-        ttk.Label(frame_thresh, text="Ch3 (TxRed) min:").grid(row=5, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(frame_thresh, textvariable=self.ch3_min, width=10).grid(row=5, column=1, padx=8, pady=6)
-        ttk.Label(frame_thresh, text="max:").grid(row=5, column=2, sticky="w")
-        ttk.Entry(frame_thresh, textvariable=self.ch3_max, width=10).grid(row=5, column=3, padx=8, pady=6)
-        ttk.Label(frame_thresh, text="Color:").grid(row=5, column=4, sticky="w", padx=(4, 2))
-        self.ch3_color_button = tk.Button(
-            frame_thresh, text="  ", width=3, bg=self.ch3_color.get(),
-            command=lambda: self.pick_color(self.ch3_color, self.ch3_color_button, "TxRed (Ch3)")
-        )
-        self.ch3_color_button.grid(row=5, column=5, padx=(0, 8))
-
-        self._update_ch1_mode_state()
-
-        # Cell counting
-        frame_count = ttk.LabelFrame(self, text="Cell Counting & Intensities (nuclei from DAPI)")
-        frame_count.pack(fill="x", **pad)
-
-        ttk.Checkbutton(
-            frame_count, text="Count cells and measure per-cell / per-image intensities",
-            variable=self.count_enabled, command=self._update_count_state
-        ).grid(row=0, column=0, columnspan=4, sticky="w", padx=8, pady=6)
-
-        ttk.Label(frame_count, text="Threshold:").grid(row=1, column=0, sticky="w", padx=8, pady=4)
-        self.count_method_combo = ttk.Combobox(
-            frame_count, textvariable=self.count_method, state="readonly", width=16,
-            values=list(THRESHOLD_METHODS) + ["Manual"]
-        )
-        self.count_method_combo.grid(row=1, column=1, sticky="w", padx=8, pady=4)
-        self.count_method_combo.bind("<<ComboboxSelected>>", lambda e: self._update_count_state())
-        ttk.Label(frame_count, text="Manual value:").grid(row=1, column=2, sticky="w", padx=8)
-        self.count_manual_entry = ttk.Entry(frame_count, textvariable=self.count_manual_threshold, width=10)
-        self.count_manual_entry.grid(row=1, column=3, sticky="w", padx=8, pady=4)
-
-        ttk.Label(frame_count, text="Blur sigma (px):").grid(row=2, column=0, sticky="w", padx=8, pady=4)
-        self.count_blur_entry = ttk.Entry(frame_count, textvariable=self.count_blur, width=10)
-        self.count_blur_entry.grid(row=2, column=1, sticky="w", padx=8, pady=4)
-        ttk.Label(frame_count, text="Cell expansion (um):").grid(row=2, column=2, sticky="w", padx=8)
-        self.count_expansion_entry = ttk.Entry(frame_count, textvariable=self.count_expansion, width=10)
-        self.count_expansion_entry.grid(row=2, column=3, sticky="w", padx=8, pady=4)
-
-        ttk.Label(frame_count, text="Nucleus size min (um²):").grid(row=3, column=0, sticky="w", padx=8, pady=4)
-        self.count_min_entry = ttk.Entry(frame_count, textvariable=self.count_min_area, width=10)
-        self.count_min_entry.grid(row=3, column=1, sticky="w", padx=8, pady=4)
-        ttk.Label(frame_count, text="max (blank = none):").grid(row=3, column=2, sticky="w", padx=8)
-        self.count_max_entry = ttk.Entry(frame_count, textvariable=self.count_max_area, width=10)
-        self.count_max_entry.grid(row=3, column=3, sticky="w", padx=8, pady=4)
-
-        self.count_watershed_check = ttk.Checkbutton(
-            frame_count, text="Watershed (split touching nuclei)", variable=self.count_watershed)
-        self.count_watershed_check.grid(row=4, column=0, columnspan=2, sticky="w", padx=8, pady=(4, 8))
-        self.count_edges_check = ttk.Checkbutton(
-            frame_count, text="Exclude nuclei on image edges", variable=self.count_exclude_edges)
-        self.count_edges_check.grid(row=4, column=2, columnspan=2, sticky="w", padx=8, pady=(4, 8))
-
-        self._update_count_state()
-
-        # Run button + progress
-        frame_run = ttk.Frame(self)
-        frame_run.pack(fill="x", **pad)
-        self.run_button = ttk.Button(frame_run, text="Run All Folders", command=self.start_run)
-        self.run_button.pack(side="left", padx=8)
-        self.progress = ttk.Progressbar(frame_run, mode="indeterminate", length=280)
-        self.progress.pack(side="left", padx=8)
-
-        # Log output
-        frame_log = ttk.LabelFrame(self, text="Log")
-        frame_log.pack(fill="both", expand=True, **pad)
-        self.log_text = tk.Text(frame_log, wrap="word", height=12, state="disabled")
-        self.log_text.pack(fill="both", expand=True, padx=8, pady=8)
-
-    def pick_color(self, color_var, button, label):
-        current = color_var.get()
-        result = colorchooser.askcolor(color=current, title=f"Choose color for {label}")
+    def pick_color(self, color_var, swatch, label):
+        result = colorchooser.askcolor(color=color_var.get(), title=f"Choose color for {label}")
         if result and result[1]:
-            hex_color = result[1]
-            color_var.set(hex_color)
-            button.config(bg=hex_color, activebackground=hex_color)
+            color_var.set(result[1])
+            self._draw_swatch(swatch, result[1])
 
     def _update_ch1_mode_state(self):
+        manual_widgets = [self.ch1_min_entry, self.ch1_max_entry] + self.ch1_headings
         if self.ch1_auto_var.get():
-            self.ch1_brightness_entry.config(state="normal")
-            self.ch1_min_entry.config(state="disabled")
-            self.ch1_max_entry.config(state="disabled")
+            for widget in manual_widgets:
+                widget.grid_remove()
+            self.ch1_brightness_frame.grid()
         else:
-            self.ch1_brightness_entry.config(state="disabled")
-            self.ch1_min_entry.config(state="normal")
-            self.ch1_max_entry.config(state="normal")
+            self.ch1_brightness_frame.grid_remove()
+            for widget in manual_widgets:
+                widget.grid()
 
     def _update_count_state(self):
         enabled = self.count_enabled.get()
-        state = "normal" if enabled else "disabled"
+        state = ["!disabled"] if enabled else ["disabled"]
         for widget in (self.count_blur_entry, self.count_expansion_entry, self.count_min_entry,
-                       self.count_max_entry, self.count_watershed_check, self.count_edges_check):
-            widget.config(state=state)
+                       self.count_max_entry, self.count_watershed_check, self.count_edges_check,
+                       self.count_manual_entry, self.count_manual_label):
+            widget.state(state)
         self.count_method_combo.config(state="readonly" if enabled else "disabled")
-        manual = enabled and self.count_method.get() == "Manual"
-        self.count_manual_entry.config(state="normal" if manual else "disabled")
+        if self.count_method.get() == "Manual":
+            self.count_manual_label.grid()
+            self.count_manual_entry.grid()
+        else:
+            self.count_manual_label.grid_remove()
+            self.count_manual_entry.grid_remove()
+
+    def _update_folder_count(self):
+        n = len(self.source_folders)
+        self.folder_count_text.set(f"{n} folder{'s' if n != 1 else ''}" if n else "")
+        if n:
+            self.folder_placeholder.place_forget()
+        else:
+            self.folder_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+
+    def _set_status(self, text, kind="idle"):
+        self._status_kind = kind
+        self.status_text.set(text)
+        self.status_label.config(style={"ok": "StatusOk.TLabel", "error": "StatusError.TLabel"}
+                                 .get(kind, "Status.TLabel"))
 
     def _read_count_settings(self):
         """Parse the cell-counting fields. Returns None if counting is off,
@@ -785,6 +1125,8 @@ class App(_BaseWindow):
             raise ValueError("Nucleus max size must be greater than the min size.")
         return settings
 
+    # ── folders ────────────────────────────────────────────────────────────
+
     def add_folder(self):
         folder = filedialog.askdirectory(title="Select a source folder containing TIFF files")
         if folder and folder not in self.source_folders:
@@ -792,6 +1134,7 @@ class App(_BaseWindow):
             self.folder_listbox.insert("end", folder)
         elif folder in self.source_folders:
             messagebox.showinfo("Already added", "That folder is already in the list.")
+        self._update_folder_count()
 
     def on_drop(self, event):
         # event.data is a Tcl list of dropped paths (braces around any path
@@ -813,6 +1156,7 @@ class App(_BaseWindow):
                     skipped_dupes.append(path)
             elif os.path.isfile(path):
                 skipped_files.append(path)
+        self._update_folder_count()
 
         if skipped_files and not added:
             messagebox.showinfo(
@@ -828,18 +1172,45 @@ class App(_BaseWindow):
         for index in reversed(selected):
             self.folder_listbox.delete(index)
             del self.source_folders[index]
+        self._update_folder_count()
 
     def clear_folders(self):
         self.folder_listbox.delete(0, "end")
         self.source_folders.clear()
+        self._update_folder_count()
+
+    # ── log ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _log_tag(message):
+        if "ERROR" in message or "FAILED" in message:
+            return "error"
+        if "Batch complete" in message:
+            return "ok" if " 0 failed" in message else "warn"
+        if "Counted" in message or "OK:" in message or "All done" in message:
+            return "ok"
+        if "Step " in message and ("complete" not in message):
+            return "step"
+        if "No " in message or "Single-channel" in message or "Renamed" in message:
+            return "dim"
+        return None
 
     def log(self, message):
+        tag = self._log_tag(message)
+
         def append():
             self.log_text.config(state="normal")
-            self.log_text.insert("end", message + "\n")
+            self.log_text.insert("end", message + "\n", tag or ())
             self.log_text.see("end")
             self.log_text.config(state="disabled")
         self.after(0, append)
+
+    def _clear_log(self):
+        self.log_text.config(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.config(state="disabled")
+
+    # ── running ────────────────────────────────────────────────────────────
 
     def start_run(self):
         folders = list(self.source_folders)
@@ -882,14 +1253,12 @@ class App(_BaseWindow):
             messagebox.showerror("Invalid cell counting settings", str(e))
             return
 
-        self.run_button.config(state="disabled")
-        self.add_button.config(state="disabled")
-        self.remove_button.config(state="disabled")
-        self.clear_button.config(state="disabled")
+        for button in (self.run_button, self.add_button, self.remove_button, self.clear_button):
+            button.state(["disabled"])
+        self.progress.config(mode="indeterminate", value=0)
         self.progress.start(10)
-        self.log_text.config(state="normal")
-        self.log_text.delete("1.0", "end")
-        self.log_text.config(state="disabled")
+        self._clear_log()
+        self._set_status(f"Processing {len(folders)} folder{'s' if len(folders) != 1 else ''}…")
 
         thread = threading.Thread(
             target=self._run_all_worker,
@@ -943,9 +1312,11 @@ class App(_BaseWindow):
         def show_summary():
             msg = f"{len(succeeded)} of {len(folders)} folder(s) completed successfully."
             if failed:
+                self._set_status(f"Finished with errors — {len(failed)} of {len(folders)} failed", "error")
                 msg += f"\n\n{len(failed)} folder(s) failed — see the log for details."
                 messagebox.showwarning("Batch finished with errors", msg)
             else:
+                self._set_status(f"Done — {len(succeeded)} of {len(folders)} folders processed", "ok")
                 messagebox.showinfo("Batch complete", msg)
             # Open each successful output folder once, now that everything's done
             for _, output in succeeded:
@@ -954,17 +1325,17 @@ class App(_BaseWindow):
                 except Exception:
                     pass
 
-        self.after(0, show_summary)
         self.after(0, self._finish)
+        self.after(0, show_summary)
 
     def _finish(self):
         self.progress.stop()
-        self.run_button.config(state="normal")
-        self.add_button.config(state="normal")
-        self.remove_button.config(state="normal")
-        self.clear_button.config(state="normal")
+        self.progress.config(mode="determinate", value=100)
+        for button in (self.run_button, self.add_button, self.remove_button, self.clear_button):
+            button.state(["!disabled"])
 
 
 if __name__ == "__main__":
+    enable_dpi_awareness()
     app = App()
     app.mainloop()

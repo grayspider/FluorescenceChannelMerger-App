@@ -22,6 +22,7 @@ imports:
  &#8226;   <a href="#PIL.Image">PIL.Image</a>
  &#8226;   <a href="#PIL.ImageDraw">PIL.ImageDraw</a>
  &#8226;   <a href="#PIL.ImageFont">PIL.ImageFont</a>
+ &#8226;   <a href="#PIL.ImageTk">PIL.ImageTk</a>
  &#8226;   <a href="#_collections_abc">_collections_abc</a>
  &#8226;   <a href="#_weakrefset">_weakrefset</a>
  &#8226;   <a href="#abc">abc</a>
@@ -32,6 +33,8 @@ imports:
  &#8226;   <a href="#contextlib">contextlib</a>
  &#8226;   <a href="#copyreg">copyreg</a>
  &#8226;   <a href="#csv">csv</a>
+ &#8226;   <a href="#ctypes">ctypes</a>
+ &#8226;   <a href="#darkdetect">darkdetect</a>
  &#8226;   <a href="#encodings">encodings</a>
  &#8226;   <a href="#encodings.aliases">encodings.aliases</a>
  &#8226;   <a href="#encodings.ascii">encodings.ascii</a>
@@ -191,11 +194,14 @@ imports:
  &#8226;   <a href="#sre_constants">sre_constants</a>
  &#8226;   <a href="#sre_parse">sre_parse</a>
  &#8226;   <a href="#stat">stat</a>
+ &#8226;   <a href="#sv_ttk">sv_ttk</a>
+ &#8226;   <a href="#sys">sys</a>
  &#8226;   <a href="#threading">threading</a>
  &#8226;   <a href="#tifffile">tifffile</a>
  &#8226;   <a href="#tkinter">tkinter</a>
  &#8226;   <a href="#tkinter.colorchooser">tkinter.colorchooser</a>
  &#8226;   <a href="#tkinter.filedialog">tkinter.filedialog</a>
+ &#8226;   <a href="#tkinter.font">tkinter.font</a>
  &#8226;   <a href="#tkinter.messagebox">tkinter.messagebox</a>
  &#8226;   <a href="#tkinter.ttk">tkinter.ttk</a>
  &#8226;   <a href="#tkinterdnd2">tkinterdnd2</a>
@@ -1434,7 +1440,8 @@ imported by:
   <a target="code" href="" type="text/plain"><tt>Foundation</tt></a>
 <span class="moduletype">MissingModule</span>  <div class="import">
 imported by:
-    <a href="#pandas.io.clipboard">pandas.io.clipboard</a>
+    <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
+ &#8226;   <a href="#pandas.io.clipboard">pandas.io.clipboard</a>
 
   </div>
 
@@ -2700,7 +2707,8 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#PIL">PIL</a>
+    <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
+ &#8226;   <a href="#PIL">PIL</a>
  &#8226;   <a href="#PIL.SpiderImagePlugin">PIL.SpiderImagePlugin</a>
  &#8226;   <a href="#matplotlib.backends._backend_tk">matplotlib.backends._backend_tk</a>
 
@@ -3778,6 +3786,17 @@ imported by:
 </div>
 
 <div class="node">
+  <a name="PyObjCTools"></a>
+  <a target="code" href="" type="text/plain"><tt>PyObjCTools</tt></a>
+<span class="moduletype">MissingModule</span>  <div class="import">
+imported by:
+    <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
+
+  </div>
+
+</div>
+
+<div class="node">
   <a name="PyQt4"></a>
   <a target="code" href="" type="text/plain"><tt>PyQt4</tt></a>
 <span class="moduletype">MissingModule</span>  <div class="import">
@@ -4366,6 +4385,7 @@ imported by:
  &#8226;   <a href="#sklearn.externals.array_api_extra._lib._lazy">sklearn.externals.array_api_extra._lib._lazy</a>
  &#8226;   <a href="#sklearn.externals.array_api_extra._lib._utils._helpers">sklearn.externals.array_api_extra._lib._utils._helpers</a>
  &#8226;   <a href="#sklearn.utils._tags">sklearn.utils._tags</a>
+ &#8226;   <a href="#sv_ttk">sv_ttk</a>
  &#8226;   <a href="#tifffile._imagecodecs">tifffile._imagecodecs</a>
  &#8226;   <a href="#tifffile.geodb">tifffile.geodb</a>
  &#8226;   <a href="#tifffile.tifffile">tifffile.tifffile</a>
@@ -9261,12 +9281,15 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#_pyi_rth_utils._win32">_pyi_rth_utils._win32</a>
+    <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
+ &#8226;   <a href="#_pyi_rth_utils._win32">_pyi_rth_utils._win32</a>
  &#8226;   <a href="#ctypes._aix">ctypes._aix</a>
  &#8226;   <a href="#ctypes._endian">ctypes._endian</a>
  &#8226;   <a href="#ctypes.macholib">ctypes.macholib</a>
  &#8226;   <a href="#ctypes.util">ctypes.util</a>
  &#8226;   <a href="#ctypes.wintypes">ctypes.wintypes</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
+ &#8226;   <a href="#darkdetect._windows_detect">darkdetect._windows_detect</a>
  &#8226;   <a href="#dateutil.tz.win">dateutil.tz.win</a>
  &#8226;   <a href="#multiprocessing.sharedctypes">multiprocessing.sharedctypes</a>
  &#8226;   <a href="#numpy._core._dtype_ctypes">numpy._core._dtype_ctypes</a>
@@ -9420,6 +9443,7 @@ imports:
   <div class="import">
 imported by:
     <a href="#cffi.api">cffi.api</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
  &#8226;   <a href="#threadpoolctl">threadpoolctl</a>
 
   </div>
@@ -9437,6 +9461,7 @@ imports:
   <div class="import">
 imported by:
     <a href="#_pyi_rth_utils._win32">_pyi_rth_utils._win32</a>
+ &#8226;   <a href="#darkdetect._windows_detect">darkdetect._windows_detect</a>
  &#8226;   <a href="#dateutil.tz.win">dateutil.tz.win</a>
  &#8226;   <a href="#pandas.io.clipboard">pandas.io.clipboard</a>
  &#8226;   <a href="#threadpoolctl">threadpoolctl</a>
@@ -9521,6 +9546,110 @@ imported by:
 <span class="moduletype">MissingModule</span>  <div class="import">
 imported by:
     <a href="#scipy._lib._testutils">scipy._lib._testutils</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="darkdetect"></a>
+  <a target="code" href="///C:/Users/obfau/AppData/Local/Programs/Python/Python312/Lib/site-packages/darkdetect/__init__.py" type="text/plain"><tt>darkdetect</tt></a>
+<span class="moduletype">Package</span>  <div class="import">
+imports:
+    <a href="#darkdetect._dummy">darkdetect._dummy</a>
+ &#8226;   <a href="#darkdetect._linux_detect">darkdetect._linux_detect</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
+ &#8226;   <a href="#darkdetect._windows_detect">darkdetect._windows_detect</a>
+ &#8226;   <a href="#platform">platform</a>
+ &#8226;   <a href="#sys">sys</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
+ &#8226;   <a href="#darkdetect._dummy">darkdetect._dummy</a>
+ &#8226;   <a href="#darkdetect._linux_detect">darkdetect._linux_detect</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
+ &#8226;   <a href="#darkdetect._windows_detect">darkdetect._windows_detect</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="darkdetect._dummy"></a>
+  <a target="code" href="///C:/Users/obfau/AppData/Local/Programs/Python/Python312/Lib/site-packages/darkdetect/_dummy.py" type="text/plain"><tt>darkdetect._dummy</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#darkdetect">darkdetect</a>
+ &#8226;   <a href="#typing">typing</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#darkdetect">darkdetect</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="darkdetect._linux_detect"></a>
+  <a target="code" href="///C:/Users/obfau/AppData/Local/Programs/Python/Python312/Lib/site-packages/darkdetect/_linux_detect.py" type="text/plain"><tt>darkdetect._linux_detect</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#darkdetect">darkdetect</a>
+ &#8226;   <a href="#subprocess">subprocess</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#darkdetect">darkdetect</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="darkdetect._mac_detect"></a>
+  <a target="code" href="///C:/Users/obfau/AppData/Local/Programs/Python/Python312/Lib/site-packages/darkdetect/_mac_detect.py" type="text/plain"><tt>darkdetect._mac_detect</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#Foundation">Foundation</a>
+ &#8226;   <a href="#PyObjCTools">PyObjCTools</a>
+ &#8226;   <a href="#ctypes">ctypes</a>
+ &#8226;   <a href="#ctypes.util">ctypes.util</a>
+ &#8226;   <a href="#darkdetect">darkdetect</a>
+ &#8226;   <a href="#os">os</a>
+ &#8226;   <a href="#pathlib">pathlib</a>
+ &#8226;   <a href="#signal">signal</a>
+ &#8226;   <a href="#subprocess">subprocess</a>
+ &#8226;   <a href="#sys">sys</a>
+ &#8226;   <a href="#typing">typing</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#darkdetect">darkdetect</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="darkdetect._windows_detect"></a>
+  <a target="code" href="///C:/Users/obfau/AppData/Local/Programs/Python/Python312/Lib/site-packages/darkdetect/_windows_detect.py" type="text/plain"><tt>darkdetect._windows_detect</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#ctypes">ctypes</a>
+ &#8226;   <a href="#ctypes.wintypes">ctypes.wintypes</a>
+ &#8226;   <a href="#darkdetect">darkdetect</a>
+ &#8226;   <a href="#winreg">winreg</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#darkdetect">darkdetect</a>
 
   </div>
 
@@ -13956,6 +14085,7 @@ imported by:
  &#8226;   <a href="#sklearn.utils.parallel">sklearn.utils.parallel</a>
  &#8226;   <a href="#sklearn.utils.validation">sklearn.utils.validation</a>
  &#8226;   <a href="#statistics">statistics</a>
+ &#8226;   <a href="#sv_ttk">sv_ttk</a>
  &#8226;   <a href="#tempfile">tempfile</a>
  &#8226;   <a href="#threading">threading</a>
  &#8226;   <a href="#threadpoolctl">threadpoolctl</a>
@@ -35651,6 +35781,7 @@ imported by:
  &#8226;   <a href="#ctypes._aix">ctypes._aix</a>
  &#8226;   <a href="#ctypes.macholib.dyld">ctypes.macholib.dyld</a>
  &#8226;   <a href="#ctypes.util">ctypes.util</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
  &#8226;   <a href="#dateutil.tz.tz">dateutil.tz.tz</a>
  &#8226;   <a href="#doctest">doctest</a>
  &#8226;   <a href="#email.utils">email.utils</a>
@@ -49261,7 +49392,8 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#importlib.metadata">importlib.metadata</a>
+    <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
+ &#8226;   <a href="#importlib.metadata">importlib.metadata</a>
  &#8226;   <a href="#importlib.resources._common">importlib.resources._common</a>
  &#8226;   <a href="#importlib.resources._legacy">importlib.resources._legacy</a>
  &#8226;   <a href="#importlib.resources.abc">importlib.resources.abc</a>
@@ -49331,6 +49463,7 @@ imported by:
  &#8226;   <a href="#skimage">skimage</a>
  &#8226;   <a href="#sklearn.utils._repr_html.estimator">sklearn.utils._repr_html.estimator</a>
  &#8226;   <a href="#sklearn.utils.discovery">sklearn.utils.discovery</a>
+ &#8226;   <a href="#sv_ttk">sv_ttk</a>
  &#8226;   <a href="#zipfile._path">zipfile._path</a>
 
   </div>
@@ -50657,7 +50790,8 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#joblib.externals.cloudpickle.cloudpickle">joblib.externals.cloudpickle.cloudpickle</a>
+    <a href="#darkdetect">darkdetect</a>
+ &#8226;   <a href="#joblib.externals.cloudpickle.cloudpickle">joblib.externals.cloudpickle.cloudpickle</a>
  &#8226;   <a href="#narwhals.functions">narwhals.functions</a>
  &#8226;   <a href="#numpy.f2py.crackfortran">numpy.f2py.crackfortran</a>
  &#8226;   <a href="#numpy.lib._utils_impl">numpy.lib._utils_impl</a>
@@ -70915,6 +71049,7 @@ imported by:
  &#8226;   <a href="#asyncio.proactor_events">asyncio.proactor_events</a>
  &#8226;   <a href="#asyncio.runners">asyncio.runners</a>
  &#8226;   <a href="#asyncio.unix_events">asyncio.unix_events</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
  &#8226;   <a href="#joblib.externals.loky.backend.popen_loky_posix">joblib.externals.loky.backend.popen_loky_posix</a>
  &#8226;   <a href="#joblib.externals.loky.backend.resource_tracker">joblib.externals.loky.backend.resource_tracker</a>
  &#8226;   <a href="#joblib.externals.loky.backend.utils">joblib.externals.loky.backend.utils</a>
@@ -84639,6 +84774,8 @@ imported by:
  &#8226;   <a href="#cffi.pkgconfig">cffi.pkgconfig</a>
  &#8226;   <a href="#ctypes._aix">ctypes._aix</a>
  &#8226;   <a href="#ctypes.util">ctypes.util</a>
+ &#8226;   <a href="#darkdetect._linux_detect">darkdetect._linux_detect</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
  &#8226;   <a href="#http.server">http.server</a>
  &#8226;   <a href="#joblib.externals.loky.backend.context">joblib.externals.loky.backend.context</a>
  &#8226;   <a href="#joblib.externals.loky.backend.fork_exec">joblib.externals.loky.backend.fork_exec</a>
@@ -84687,10 +84824,31 @@ imported by:
 </div>
 
 <div class="node">
+  <a name="sv_ttk"></a>
+  <a target="code" href="///C:/Users/obfau/AppData/Local/Programs/Python/Python312/Lib/site-packages/sv_ttk/__init__.py" type="text/plain"><tt>sv_ttk</tt></a>
+<span class="moduletype">Package</span>  <div class="import">
+imports:
+    <a href="#__future__">__future__</a>
+ &#8226;   <a href="#functools">functools</a>
+ &#8226;   <a href="#pathlib">pathlib</a>
+ &#8226;   <a href="#tkinter">tkinter</a>
+ &#8226;   <a href="#tkinter.ttk">tkinter.ttk</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
+
+  </div>
+
+</div>
+
+<div class="node">
   <a name="sys"></a>
   <tt>sys</tt> <span class="moduletype"><i>(builtin module)</i></span>  <div class="import">
 imported by:
-    <a href="#PIL.DdsImagePlugin">PIL.DdsImagePlugin</a>
+    <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
+ &#8226;   <a href="#PIL.DdsImagePlugin">PIL.DdsImagePlugin</a>
  &#8226;   <a href="#PIL.EpsImagePlugin">PIL.EpsImagePlugin</a>
  &#8226;   <a href="#PIL.IcnsImagePlugin">PIL.IcnsImagePlugin</a>
  &#8226;   <a href="#PIL.Image">PIL.Image</a>
@@ -84756,6 +84914,8 @@ imported by:
  &#8226;   <a href="#ctypes._aix">ctypes._aix</a>
  &#8226;   <a href="#ctypes._endian">ctypes._endian</a>
  &#8226;   <a href="#ctypes.util">ctypes.util</a>
+ &#8226;   <a href="#darkdetect">darkdetect</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
  &#8226;   <a href="#dataclasses">dataclasses</a>
  &#8226;   <a href="#dateutil">dateutil</a>
  &#8226;   <a href="#dateutil.rrule">dateutil.rrule</a>
@@ -85752,6 +85912,7 @@ imports:
  &#8226;   <a href="#tkinter.commondialog">tkinter.commondialog</a>
  &#8226;   <a href="#tkinter.constants">tkinter.constants</a>
  &#8226;   <a href="#tkinter.filedialog">tkinter.filedialog</a>
+ &#8226;   <a href="#tkinter.font">tkinter.font</a>
  &#8226;   <a href="#tkinter.messagebox">tkinter.messagebox</a>
  &#8226;   <a href="#tkinter.ttk">tkinter.ttk</a>
  &#8226;   <a href="#traceback">traceback</a>
@@ -85762,6 +85923,7 @@ imports:
 imported by:
     <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
  &#8226;   <a href="#matplotlib.backends._backend_tk">matplotlib.backends._backend_tk</a>
+ &#8226;   <a href="#sv_ttk">sv_ttk</a>
  &#8226;   <a href="#tifffile.tifffile">tifffile.tifffile</a>
  &#8226;   <a href="#tkinter.colorchooser">tkinter.colorchooser</a>
  &#8226;   <a href="#tkinter.commondialog">tkinter.commondialog</a>
@@ -85883,7 +86045,9 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#matplotlib.backends._backend_tk">matplotlib.backends._backend_tk</a>
+    <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
+ &#8226;   <a href="#matplotlib.backends._backend_tk">matplotlib.backends._backend_tk</a>
+ &#8226;   <a href="#tkinter">tkinter</a>
 
   </div>
 
@@ -85938,6 +86102,7 @@ imports:
   <div class="import">
 imported by:
     <a href="#FluorescenceChannelMerger.py">FluorescenceChannelMerger.py</a>
+ &#8226;   <a href="#sv_ttk">sv_ttk</a>
  &#8226;   <a href="#tkinter">tkinter</a>
 
   </div>
@@ -86415,6 +86580,8 @@ imported by:
  &#8226;   <a href="#contourpy.dechunk">contourpy.dechunk</a>
  &#8226;   <a href="#contourpy.typecheck">contourpy.typecheck</a>
  &#8226;   <a href="#cycler">cycler</a>
+ &#8226;   <a href="#darkdetect._dummy">darkdetect._dummy</a>
+ &#8226;   <a href="#darkdetect._mac_detect">darkdetect._mac_detect</a>
  &#8226;   <a href="#functools">functools</a>
  &#8226;   <a href="#importlib.metadata">importlib.metadata</a>
  &#8226;   <a href="#importlib.metadata._meta">importlib.metadata._meta</a>
@@ -88319,7 +88486,8 @@ imported by:
   <a name="winreg"></a>
   <tt>winreg</tt> <span class="moduletype"><i>(builtin module)</i></span>  <div class="import">
 imported by:
-    <a href="#importlib._bootstrap_external">importlib._bootstrap_external</a>
+    <a href="#darkdetect._windows_detect">darkdetect._windows_detect</a>
+ &#8226;   <a href="#importlib._bootstrap_external">importlib._bootstrap_external</a>
  &#8226;   <a href="#matplotlib">matplotlib</a>
  &#8226;   <a href="#matplotlib.font_manager">matplotlib.font_manager</a>
  &#8226;   <a href="#mimetypes">mimetypes</a>

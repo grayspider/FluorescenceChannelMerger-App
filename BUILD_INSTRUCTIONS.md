@@ -11,8 +11,9 @@ machine** (yours, a lab computer, whatever you'll actually use it on).
    If it's not installed, grab it from python.org — during install, check
    **"Add python.exe to PATH."**
 
-2. Put these three files in the same folder:
+2. Put these four files in the same folder:
    - `FluorescenceChannelMerger.py`
+   - `FluorescenceChannelMerger.ico`
    - `requirements.txt`
    - `build_exe.bat`
 
@@ -20,7 +21,8 @@ machine** (yours, a lab computer, whatever you'll actually use it on).
 
 Double-click `build_exe.bat` (or run it from Command Prompt in that folder).
 It will:
-1. Install `numpy`, `tifffile`, `pillow`, `scipy`, `scikit-image`, and `pyinstaller`
+1. Install `numpy`, `tifffile`, `pillow`, `scipy`, `scikit-image`, `sv-ttk`,
+   `darkdetect`, `tkinterdnd2`, and `pyinstaller`
 2. Package the script into a single `.exe`
 3. Drop the result at `dist\FluorescenceChannelMerger.exe`
 
