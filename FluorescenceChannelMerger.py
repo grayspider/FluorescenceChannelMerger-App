@@ -42,6 +42,7 @@ import re
 import sys
 import csv
 import ctypes
+import subprocess
 import contextlib
 import threading
 import concurrent.futures
@@ -71,6 +72,36 @@ try:
     import darkdetect
 except ImportError:
     darkdetect = None
+
+IS_MAC = sys.platform == "darwin"
+
+
+def open_folder(path):
+    """Open a folder in File Explorer (Windows) or Finder (macOS)."""
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(path)
+        elif IS_MAC:
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except Exception:
+        pass  # folder can't be opened automatically -- the files are still there
+
+
+def load_label_font(size):
+    """Arial for the scale bar label, wherever this OS keeps it."""
+    for name in ("arial.ttf", "Arial.ttf",
+                 "/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf",
+                 "DejaVuSans.ttf"):
+        try:
+            return ImageFont.truetype(name, size)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size)
+    except TypeError:  # Pillow < 10.1 has no sized default font
+        return ImageFont.load_default()
 
 
 # ── PIPELINE (same logic as the CLI script, wrapped as functions) ───────────
@@ -493,10 +524,7 @@ def run_pipeline(source, pixels_per_um, ch1_auto, ch1_min_setting, ch1_max_setti
             draw.rectangle([bar_x1, bar_y1, bar_x2, bar_y2], fill=BAR_COLOR)
 
             label = f"{scale_bar_um} um"
-            try:
-                font = ImageFont.truetype("arial.ttf", FONT_SIZE)
-            except Exception:
-                font = ImageFont.load_default()
+            font = load_label_font(FONT_SIZE)
 
             bbox = draw.textbbox((0, 0), label, font=font)
             text_width = bbox[2] - bbox[0]
@@ -545,10 +573,7 @@ def run_pipeline(source, pixels_per_um, ch1_auto, ch1_min_setting, ch1_max_setti
         log(f"Cell counts and intensities saved to:\n{counts_dir}")
 
     if open_output:
-        try:
-            os.startfile(output)
-        except Exception:
-            pass  # not on Windows, or folder can't be opened automatically
+        open_folder(output)
 
     return output
 
@@ -557,6 +582,20 @@ def run_pipeline(source, pixels_per_um, ch1_auto, ch1_min_setting, ch1_max_setti
 
 APP_VERSION = "4.0"
 ICON_FILE = "FluorescenceChannelMerger.ico"
+
+# Interface fonts. macOS Tk draws fonts at 72 dpi, so the same point size looks
+# about a quarter smaller there than on Windows -- sizes are bumped to match.
+if IS_MAC:
+    UI_FONT, UI_FONT_BOLD, MONO_FONTS, FONT_SCALE = "Helvetica Neue", "Helvetica Neue", ("Menlo",), 1.3
+else:
+    UI_FONT, UI_FONT_BOLD, MONO_FONTS, FONT_SCALE = "Segoe UI", "Segoe UI Semibold", ("Cascadia Mono", "Consolas"), 1.0
+
+
+def ui_font(size, bold=False):
+    size = round(size * FONT_SCALE)
+    if bold:
+        return (UI_FONT_BOLD, size, "bold") if IS_MAC else (UI_FONT_BOLD, size)
+    return (UI_FONT, size)
 
 # Colors for the few classic Tk widgets (folder list, log, tooltips) that the
 # Sun Valley theme doesn't style itself -- matched to the theme's own colors.
@@ -656,7 +695,7 @@ class Tooltip:
         self.window.wm_geometry(f"+{x}+{y}")
         tk.Label(
             self.window, text=self.text, justify="left", wraplength=self.app.px(300),
-            bg=p["surface"], fg=p["fg"], font=("Segoe UI", 9),
+            bg=p["surface"], fg=p["fg"], font=ui_font(9),
             padx=self.app.px(10), pady=self.app.px(7),
             highlightthickness=1, highlightbackground=p["border"], bd=0,
         ).pack()
@@ -680,13 +719,17 @@ class App(_BaseWindow):
         self.title("Fluorescence Channel Merger")
 
         # Tk reports how many pixels a point is; 96 dpi (100% scaling) = 1.333.
-        self._scale = float(self.tk.call("tk", "scaling")) / (96 / 72)
+        # macOS handles Retina scaling itself, so layout sizes stay as given.
+        self._scale = 1.0 if IS_MAC else float(self.tk.call("tk", "scaling")) / (96 / 72)
 
         icon_path = resource_path(ICON_FILE)
         self._icon_image = None
         if os.path.exists(icon_path):
             try:
-                self.iconbitmap(default=icon_path)
+                self.iconbitmap(default=icon_path)  # Windows only; the Mac app uses its .icns
+            except tk.TclError:
+                pass
+            try:
                 header_icon = Image.open(icon_path).convert("RGBA")
                 header_icon = header_icon.resize((self.px(36), self.px(36)), Image.LANCZOS)
                 self._icon_image = ImageTk.PhotoImage(header_icon)
@@ -727,8 +770,9 @@ class App(_BaseWindow):
         self.folder_count_text = tk.StringVar()
 
         self._swatches = []  # (label widget, color var) pairs, redrawn on theme change
-        mono_families = set(tkfont.families())
-        self._mono_font = ("Cascadia Mono" if "Cascadia Mono" in mono_families else "Consolas", 9)
+        installed = set(tkfont.families())
+        mono_family = next((f for f in MONO_FONTS if f in installed), "Courier")
+        self._mono_font = (mono_family, round(9 * FONT_SCALE))
 
         self._apply_theme()
         self._build_header()
@@ -763,22 +807,25 @@ class App(_BaseWindow):
                                ("SunValleySubtitleFont", 14), ("SunValleyTitleFont", 18),
                                ("SunValleyTitleLargeFont", 24), ("SunValleyDisplayFont", 36)):
                 try:
-                    tkfont.nametofont(name).configure(size=size)
+                    font = tkfont.nametofont(name)
+                    font.configure(size=round(size * FONT_SCALE))
+                    if IS_MAC:
+                        font.configure(family=UI_FONT)
                 except tk.TclError:
                     pass
 
         p = self.palette
         style = ttk.Style(self)
-        style.configure("Title.TLabel", font=("Segoe UI Semibold", 17))
-        style.configure("Subtitle.TLabel", font=("Segoe UI", 10), foreground=p["muted"])
-        style.configure("Heading.TLabel", font=("Segoe UI Semibold", 12))
+        style.configure("Title.TLabel", font=ui_font(17, bold=True))
+        style.configure("Subtitle.TLabel", font=ui_font(10), foreground=p["muted"])
+        style.configure("Heading.TLabel", font=ui_font(12, bold=True))
         style.configure("Muted.TLabel", foreground=p["muted"])
-        style.configure("Caption.TLabel", font=("Segoe UI", 9), foreground=p["muted"])
-        style.configure("Info.TLabel", font=("Segoe UI", 10), foreground=p["muted"])
+        style.configure("Caption.TLabel", font=ui_font(9), foreground=p["muted"])
+        style.configure("Info.TLabel", font=ui_font(10), foreground=p["muted"])
         style.configure("Status.TLabel", foreground=p["muted"])
         style.configure("StatusOk.TLabel", foreground=p["ok"])
         style.configure("StatusError.TLabel", foreground=p["error"])
-        style.configure("Run.Accent.TButton", font=("Segoe UI Semibold", 11),
+        style.configure("Run.Accent.TButton", font=ui_font(11, bold=True),
                         padding=(self.px(22), self.px(8)))
 
     def _apply_palette(self):
@@ -997,7 +1044,7 @@ class App(_BaseWindow):
         list_frame.rowconfigure(0, weight=1)
         self.folder_listbox = tk.Listbox(
             list_frame, height=5, width=48, selectmode="extended", activestyle="none",
-            relief="flat", bd=0, highlightthickness=1, font=("Segoe UI", 10))
+            relief="flat", bd=0, highlightthickness=1, font=ui_font(10))
         self.folder_listbox.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.folder_listbox.yview)
         scrollbar.grid(row=0, column=1, sticky="ns", padx=(self.px(4), 0))
@@ -1006,7 +1053,7 @@ class App(_BaseWindow):
         hint = ("Drag folders here, or click  ＋ Add folder" if DND_AVAILABLE
                 else "Click  ＋ Add folder  to choose a folder of .tif files")
         self.folder_placeholder = tk.Label(self.folder_listbox, text=hint,
-                                           font=("Segoe UI", 10), cursor="hand2")
+                                           font=ui_font(10), cursor="hand2")
         self.folder_placeholder.bind("<Button-1>", lambda e: self.add_folder())
 
         if DND_AVAILABLE:
@@ -1320,10 +1367,7 @@ class App(_BaseWindow):
                 messagebox.showinfo("Batch complete", msg)
             # Open each successful output folder once, now that everything's done
             for _, output in succeeded:
-                try:
-                    os.startfile(output)
-                except Exception:
-                    pass
+                open_folder(output)
 
         self.after(0, self._finish)
         self.after(0, show_summary)

@@ -1,0 +1,8 @@
+# Mac build output and its private Python environment (see build_mac.sh)
+.venv-mac/
+build-mac/
+dist-mac/
+
+# Python cache
+__pycache__/
+.DS_Store

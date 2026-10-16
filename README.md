@@ -72,7 +72,8 @@ your thresholds, and click **Run**.
 
 ## What you need
 
-- **Windows PC** (the packaged `.exe` runs standalone — no Python required)
+- **Windows PC** (the packaged `.exe` runs standalone — no Python required),
+  **or a Mac** running macOS 11 or newer (Apple Silicon or Intel)
 - Your raw `.tif` files, one file per channel per image
 
 **File naming:** your TIFF filenames need to contain (case-insensitive)
@@ -102,11 +103,25 @@ causing an error.
 
 ## Getting started
 
+**Windows**
+
 1. Download `FluorescenceChannelMerger.exe`.
 2. Double-click it to launch. No installation needed.
 3. Windows may show a **SmartScreen warning** the first time, since the app
    isn't signed with a paid certificate. Click **More info → Run anyway**.
    This is normal for in-house lab tools and not a sign of a problem.
+
+**Mac**
+
+1. From the [Releases](https://github.com/grayspider/FluorescenceChannelMerger-App/releases)
+   page, download the Mac zip for your chip: `macOS-arm64` for Apple
+   Silicon (M1 and newer), `macOS-x86_64` for Intel. (Apple menu →
+   **About This Mac** tells you which you have.)
+2. Unzip it and double-click **Fluorescence Channel Merger**. You can drag
+   it into Applications first.
+3. macOS blocks unsigned apps the first time. Go to **System Settings →
+   Privacy & Security** and click **Open Anyway**. See
+   `BUILD_INSTRUCTIONS_MAC.md` for details and other fixes.
 
 ---
 
@@ -301,7 +316,7 @@ channels it does have, with the missing ones left blank in the final PNG.
 | Single nuclei split in two on the outline image | Turn off **Split touching nuclei**, or increase **Blur σ** |
 | Clumps of nuclei counted as one | Make sure **Split touching nuclei** is on; set a **Max (µm²)** size to drop large clumps you can't split |
 | `Cell_Count` is blank for an image | That image has no DAPI channel, so there's nothing to count |
-| Output folders don't open automatically | Only happens automatically on Windows, and only after the whole batch finishes; the files are still there, just navigate to the `- PNG` folder manually |
+| Output folders don't open automatically | They open (in File Explorer or Finder) only after the whole batch finishes; the files are still there either way, just navigate to the `- PNG` folder manually |
 
 ---
 
@@ -312,7 +327,12 @@ The source code (`FluorescenceChannelMerger.py`) is included alongside the
 for image processing, scipy/scikit-image for cell segmentation, and sv-ttk +
 darkdetect for the modern theme and dark mode). If you need to rebuild the `.exe` after making
 changes, see `BUILD_INSTRUCTIONS.md` — it walks through the one-command
-PyInstaller build.
+PyInstaller build. For the Mac app, see `BUILD_INSTRUCTIONS_MAC.md`: GitHub
+can build it for you (no Mac needed), or run `build_mac.sh` on a Mac.
+
+`tests/smoke_test.py` runs the whole pipeline on synthetic images and checks
+the cell counts. Run it with `python tests/smoke_test.py` after changing the
+image-processing code.
 
 ---
 

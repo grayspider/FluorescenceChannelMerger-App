@@ -1,0 +1,83 @@
+# Builds the macOS app on GitHub's Mac machines, so no Mac is needed locally.
+#
+#  - Runs automatically when the app or its Mac build files change, and the
+#    zipped apps can be downloaded from the run's "Artifacts" section.
+#  - When a GitHub Release is published, the zips are attached to it.
+#  - "Run workflow" on the Actions tab builds on demand; fill in a release
+#    tag (e.g. v4.0) to attach the zips to that existing release.
+name: Build macOS app
+
+on:
+  push:
+    paths:
+      - FluorescenceChannelMerger.py
+      - FluorescenceChannelMerger-mac.spec
+      - FluorescenceChannelMerger.icns
+      - build_mac.sh
+      - requirements.txt
+      - tests/**
+      - .github/workflows/build-macos.yml
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Attach the zips to this existing release (e.g. v4.0). Leave blank to just build."
+        required: false
+        default: ""
+
+permissions:
+  contents: write  # needed to attach files to releases
+
+jobs:
+  build:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15        # Apple Silicon Macs (M1 and newer)
+            arch: arm64
+          - runner: macos-15-intel  # Intel Macs
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the app
+        run: PYTHON=python ./build_mac.sh
+
+      - name: Test the image pipeline on synthetic images
+        run: .venv-mac/bin/python tests/smoke_test.py
+
+      - name: Check the app launches
+        run: |
+          APP_BIN="dist-mac/Fluorescence Channel Merger.app/Contents/MacOS/FluorescenceChannelMerger"
+          "$APP_BIN" &
+          PID=$!
+          sleep 20
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "App is running after 20 s -- OK"
+            kill "$PID"
+          else
+            wait "$PID"; echo "App exited early (code $?)"; exit 1
+          fi
+
+      - name: Upload the zipped app
+        uses: actions/upload-artifact@v4
+        with:
+          name: FluorescenceChannelMerger-macOS-${{ matrix.arch }}
+          path: dist-mac/*.zip
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release' || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: gh release upload "$TAG" dist-mac/*.zip --clobber --repo "$GITHUB_REPOSITORY"
